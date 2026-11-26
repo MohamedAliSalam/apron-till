@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Apron Till</title>
+<meta name="theme-color" content="#23406B">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+html{-webkit-text-size-adjust:100%}
+:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);color-scheme:light}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+.hint{color:var(--muted);max-width:70ch}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.filebtn{flex-direction:row;display:inline-flex;font-size:1rem;font-weight:600}
+/* Layout: a tablet till. Top bar with three tabs; Cashier is a two-pane order builder, Orders is a wall of large cards, Admin is plain forms. */
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --fg:#1D1F22; --muted:#5B6675; --line:#D6DCE6;
+  --bar:#23406B; --on-bar:#FFFFFF; --brand:#23406B; --sel:#23406B; --on-sel:#FFFFFF;
+  --orange:#E8913A; --on-orange:#1D1F22; --good:#1B7448; --bad:#B3352B; --soft:#E6EDF7;
+  --display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;
+  --body:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#10141A; --surface:#1A2029; --fg:#EDF0F4; --muted:#A3AEBD; --line:#2F3947;
+  --bar:#1E3860; --on-bar:#FFFFFF; --brand:#A9C0E4; --sel:#A9C0E4; --on-sel:#10141A;
+  --orange:#E8913A; --on-orange:#1D1F22; --good:#5FCB93; --bad:#F08A80; --soft:#222B38; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#10141A; --surface:#1A2029; --fg:#EDF0F4; --muted:#A3AEBD; --line:#2F3947;
+  --bar:#1E3860; --on-bar:#FFFFFF; --brand:#A9C0E4; --sel:#A9C0E4; --on-sel:#10141A;
+  --orange:#E8913A; --on-orange:#1D1F22; --good:#5FCB93; --bad:#F08A80; --soft:#222B38; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--body)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bar)}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.03em;line-height:1;margin:0}
+h2{font-size:1.5rem;color:var(--brand)}
+p{margin:0}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--bar);color:var(--on-bar)}
+.barin{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:8px;flex-wrap:wrap}
+.mark{font-family:var(--display);font-weight:700;font-size:1.6rem;letter-spacing:.08em}
+.mark small{font-weight:500;opacity:.75;letter-spacing:.14em;font-size:1rem;margin-left:6px}
+nav{display:flex;gap:6px}
+nav a{font-family:var(--display);font-weight:600;text-transform:uppercase;letter-spacing:.1em;font-size:1.1rem;text-decoration:none;color:var(--on-bar);padding:8px 16px;border-radius:8px;opacity:.75}
+nav a.on{background:var(--orange);color:var(--on-orange);opacity:1}
+nav b{display:inline-block;min-width:1.5em;text-align:center;background:var(--on-bar);color:var(--bar);border-radius:999px;font-size:.9rem;margin-left:4px;padding:0 6px}
+.status{margin-top:14px;padding:10px 14px;border-radius:8px;background:var(--soft);border:1px solid var(--line);font-size:.95rem}
+main{padding-block:20px 48px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.label{font-family:var(--display);font-weight:600;text-transform:uppercase;letter-spacing:.12em;font-size:.95rem;color:var(--muted)}
+.empty{color:var(--muted);padding:16px;border:1px dashed var(--line);border-radius:10px}
+
+/* cashier */
+.till{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;align-items:start}
+.group{display:flex;flex-direction:column;gap:8px}
+.choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.choice{background:var(--bg);border:2px solid var(--line);border-radius:12px;padding:14px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-height:76px}
+.choice b{font-family:var(--display);font-size:1.5rem;text-transform:uppercase;letter-spacing:.04em;line-height:1.05}
+.choice span{color:var(--muted);font-variant-numeric:tabular-nums}
+.choice[aria-pressed="true"]{background:var(--sel);border-color:var(--sel);color:var(--on-sel)}
+.choice[aria-pressed="true"] span{color:inherit;opacity:.85}
+.choice.small{min-height:56px;padding:10px 14px}
+.choice.small b{font-size:1.2rem}
+.addbtn{flex-direction:row;justify-content:space-between;align-items:center;gap:12px;width:100%}
+.addbtn span{text-align:right;overflow-wrap:anywhere}
+.addlist{display:flex;flex-direction:column;border:2px solid var(--line);border-radius:12px;overflow:hidden}
+.addrow{display:flex;justify-content:space-between;gap:12px;padding:14px;background:var(--bg);border:0;border-top:1px solid var(--line);cursor:pointer;font-weight:600;text-align:left;font-variant-numeric:tabular-nums}
+.addrow:first-child{border-top:0}
+.addrow[aria-pressed="true"]{background:var(--sel);color:var(--on-sel)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{display:flex;flex-direction:column;gap:6px;font-size:.9rem;font-weight:500;min-width:0}
+label.full{grid-column:1/-1}
+input,select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:11px 12px;width:100%}
+.lines{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums}
+.lines li{display:flex;justify-content:space-between;gap:12px}
+.total{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid var(--fg);padding-top:10px}
+.total b,.change b{font-family:var(--display);font-size:2.8rem;line-height:1;font-variant-numeric:tabular-nums}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;background:var(--bg);border:2px solid var(--line);border-radius:8px;padding:9px 6px;cursor:pointer;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--sel);border-color:var(--sel);color:var(--on-sel)}
+.quick{display:flex;gap:6px;flex-wrap:wrap}
+.quick button{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-variant-numeric:tabular-nums;font-weight:600}
+.change{display:flex;justify-content:space-between;align-items:baseline;background:var(--soft);border-radius:10px;padding:12px 14px}
+.change.owed b{color:var(--bad)}
+.change.back b{color:var(--good)}
+.big{font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:1.5rem;background:var(--orange);color:var(--on-orange);border:0;border-radius:10px;padding:16px;cursor:pointer}
+.big:disabled{opacity:.45;cursor:not-allowed}
+.flash{padding:12px 14px;border-radius:10px;background:var(--soft);border:1px solid var(--line);font-weight:600}
+.flash.err{color:var(--bad)}
+
+/* orders wall */
+.wall-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.ticket{background:var(--surface);border:1px solid var(--line);border-top:8px solid var(--orange);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ticket .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ticket .num{font-family:var(--display);font-weight:700;font-size:3.4rem;line-height:.85}
+.ticket .wait{color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums}
+.ticket .who{font-size:1.2rem;font-weight:600;overflow-wrap:anywhere}
+.ticket .what{font-family:var(--display);font-weight:700;text-transform:uppercase;font-size:1.7rem;letter-spacing:.04em;line-height:1}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{background:var(--soft);border-radius:999px;padding:3px 10px;font-size:.9rem;font-weight:600}
+.ticket .note{color:var(--muted);overflow-wrap:anywhere}
+.ticket .big{font-size:1.3rem;padding:12px;margin-top:auto}
+.donelist{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column}
+.donelist li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line);color:var(--muted)}
+.link{background:none;border:0;color:var(--brand);text-decoration:underline;cursor:pointer;padding:4px}
+
+/* admin */
+.admin{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{background:var(--bg);border-radius:10px;padding:12px}
+.tile b{display:block;font-family:var(--display);font-size:2.2rem;line-height:1;font-variant-numeric:tabular-nums}
+.tile span{color:var(--muted);font-size:.85rem}
+.rows{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:1fr 96px 40px;gap:8px;align-items:center}
+.row button{background:none;border:1px solid var(--line);border-radius:8px;height:44px;cursor:pointer;color:var(--bad);font-size:1.2rem}
+.btn{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:600}
+.btn.primary{background:var(--sel);border-color:var(--sel);color:var(--on-sel)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+th,td{text-align:left;padding:8px 10px;border-top:1px solid var(--line);white-space:nowrap}
+th{font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;border-top:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.span2{grid-column:1/-1}
+@media (max-width:860px){ .till,.admin{grid-template-columns:1fr} .fields{grid-template-columns:1fr} .tiles{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap barin">
+    <span class="mark">APRON<small>TILL</small></span>
+    <nav id="tabs">
+      <a href="#cashier" data-v="cashier" class="on">Cashier</a>
+      <a href="#orders" data-v="orders">Orders<b id="qcount" hidden></b></a>
+      <a href="#admin" data-v="admin">Admin</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap"><p class="status" id="status" hidden></p></div>
+
+<main class="wrap">
+  <section id="v-cashier" class="till">
+    <div class="panel">
+      <div class="group"><span class="label">Ticket</span><div class="choices" id="tickets"></div></div>
+      <div class="group"><span class="label">Add-ons</span>
+        <button type="button" class="choice small addbtn" id="addbtn" aria-expanded="false" aria-controls="addons"><b>Add-ons</b><span id="addbtn-s">None</span></button>
+        <div class="addlist" id="addons" hidden></div>
+      </div>
+      <div class="group"><span class="label">Customer (optional)</span>
+        <div class="fields">
+          <label>Name<input id="c-name" autocomplete="off" placeholder="Name for the order"></label>
+          <label>Phone number<input id="c-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="78 123 456"></label>
+          <label class="full">Note for the barista<input id="c-note" autocomplete="off" placeholder="Iced latte, first time…"></label>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <span class="label">This order</span>
+      <ul class="lines" id="lines"><li><span>Pick a ticket to start</span></li></ul>
+      <div class="total"><span class="label">Total</span><b id="total">$0</b></div>
+      <div class="group"><span class="label">Paid by</span>
+        <div class="seg" id="method">
+          <button type="button" data-m="cash" aria-pressed="true">Cash</button>
+          <button type="button" data-m="card" aria-pressed="false">Card</button>
+          <button type="button" data-m="whish" aria-pressed="false">Whish</button>
+        </div>
+      </div>
+      <div class="group" id="cashbox">
+        <label>Cash received ($)<input id="received" inputmode="decimal" autocomplete="off" placeholder="Leave empty if exact"></label>
+        <div class="quick" id="quick">
+          <button type="button" data-q="exact">Exact</button><button type="button" data-q="10">$10</button><button type="button" data-q="20">$20</button><button type="button" data-q="50">$50</button><button type="button" data-q="100">$100</button>
+        </div>
+        <div class="change" id="changebox"><span class="label" id="changelabel">Change to return</span><b id="change">$0</b></div>
+      </div>
+      <button class="big" type="button" id="place" disabled>Send order</button>
+      <p class="flash" id="flash" hidden></p>
+    </div>
+  </section>
+
+  <section id="v-orders" hidden>
+    <div class="wall-head"><h2>Orders to make</h2><span class="label" id="wallcount"></span></div>
+    <div class="wall" id="wall"><p class="empty">No orders waiting. New orders from the cashier show up here by themselves.</p></div>
+    <h2 style="margin-top:32px">Done recently</h2>
+    <ul class="donelist" id="donelist"><li><span>Nothing finished yet.</span></li></ul>
+  </section>
+
+  <section id="v-admin" class="admin" hidden>
+    <div class="panel span2">
+      <h2>Today</h2>
+      <div class="tiles">
+        <div class="tile"><b id="t-orders">0</b><span>orders</span></div>
+        <div class="tile"><b id="t-sales">$0</b><span>sales</span></div>
+        <div class="tile"><b id="t-wait">0</b><span>waiting now</span></div>
+      </div>
+      <p class="label" id="t-split"></p>
+    </div>
+    <div class="panel">
+      <h2>Tickets</h2>
+      <div class="rows" id="e-tickets"></div>
+      <div class="acts"><button class="btn" type="button" id="add-ticket">Add a ticket</button></div>
+    </div>
+    <div class="panel">
+      <h2>Add-ons</h2>
+      <div class="rows" id="e-addons"></div>
+      <div class="acts"><button class="btn" type="button" id="add-addon">Add an add-on</button></div>
+    </div>
+    <div class="panel span2">
+      <div class="acts"><button class="btn primary" type="button" id="save-menu">Save menu</button><span id="save-msg" class="label"></span></div>
+    </div>
+    <div class="panel span2">
+      <div class="wall-head" style="margin:0"><h2>Customers</h2><div class="acts"><span class="label" id="export-msg"></span><button class="btn primary" type="button" id="export">Export all orders to Excel</button><button class="btn" type="button" id="copy-cust">Copy list</button></div></div>
+      <div class="tablewrap"><table><thead><tr><th>Name</th><th>Phone</th><th class="num">Orders</th></tr></thead><tbody id="cust"><tr><td colspan="3">Customers who give a name or number appear here.</td></tr></tbody></table></div>
+    </div>
+    <div class="panel span2">
+      <h2>Backup and reset</h2>
+      <p class="hint">All orders are stored on this tablet only. Save a backup at the end of each day, in case the tablet is lost or its browser data is cleared.</p>
+      <div class="acts">
+        <button class="btn" type="button" id="backup">Save a backup file</button>
+        <label class="btn filebtn">Restore from a backup<input type="file" id="restore" accept="application/json,.json" hidden></label>
+        <button class="btn danger" type="button" id="wipe">Delete all orders</button>
+        <button class="btn danger" type="button" id="wipe-yes" hidden>Yes, delete them all</button>
+        <button class="btn" type="button" id="wipe-no" hidden>Keep them</button>
+      </div>
+      <p class="label" id="backup-msg"></p>
+    </div>
+  </section>
+</main>
+<script src="xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
