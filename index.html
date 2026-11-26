@@ -16,6 +16,10 @@ body{margin:0}
 img{max-width:100%}
 [hidden]{display:none!important}
 .hint{color:var(--muted);max-width:70ch}
+.hint.ll{text-align:right;margin-top:-10px;max-width:none;font-variant-numeric:tabular-nums}
+.change{flex-wrap:wrap;gap:4px 12px}
+.change b{font-size:clamp(1.7rem,4.2vw,2.6rem);text-align:right;margin-left:auto}
+#splitbox{align-items:center}
 .qrgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
 .qrcard{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center}
 .qrcard img{width:100%;background:#fff;border-radius:6px;padding:4px}
@@ -181,6 +185,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <span class="label">This order</span>
       <ul class="lines" id="lines"><li><span>Pick a ticket to start</span></li></ul>
       <div class="total"><span class="label">Total</span><b id="total">$0</b></div>
+      <p class="hint ll" id="total-ll"></p>
       <div class="group"><span class="label">Paid by</span>
         <div class="seg" id="method">
           <button type="button" data-m="cash" aria-pressed="true">Cash</button>
@@ -188,11 +193,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         </div>
       </div>
       <div class="group" id="cashbox">
-        <label>Cash received ($)<input id="received" inputmode="decimal" autocomplete="off" placeholder="Leave empty if exact"></label>
-        <div class="quick" id="quick">
-          <button type="button" data-q="exact">Exact</button><button type="button" data-q="10">$10</button><button type="button" data-q="20">$20</button><button type="button" data-q="50">$50</button><button type="button" data-q="100">$100</button>
+        <div class="fields">
+          <label>Received in dollars ($)<input id="received" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+          <label>Received in pounds (LL)<input id="received-ll" inputmode="numeric" autocomplete="off" placeholder="0"></label>
         </div>
-        <div class="change" id="changebox"><span class="label" id="changelabel">Change to return</span><b id="change">$0</b></div>
+        <div class="quick" id="quick">
+          <button type="button" data-q="exact">Exact</button><button type="button" data-q="10">$10</button><button type="button" data-q="20">$20</button><button type="button" data-q="50">$50</button><button type="button" data-q="100">$100</button><button type="button" data-q="exactll">Exact in LL</button>
+        </div>
+        <div class="change" id="changebox"><span class="label" id="changelabel">Give back</span><b id="change">Nothing</b></div>
+        <div class="quick" id="splitbox" hidden>
+          <button type="button" id="usd-less">Fewer dollars</button><button type="button" id="usd-more">More dollars</button><span class="hint" id="split-note"></span>
+        </div>
       </div>
       <div class="group" id="whishbox" hidden>
         <span class="label" id="whish-label">Customer scans to pay</span>
@@ -242,6 +253,16 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <h2>Add-ons</h2>
       <div class="rows" id="e-addons"></div>
       <div class="acts"><button class="btn" type="button" id="add-addon">Add an add-on</button></div>
+    </div>
+    <div class="panel span2">
+      <h2>Cash and exchange rate</h2>
+      <div class="fields">
+        <label>Lebanese pounds for $1<input id="e-rate" inputmode="numeric" autocomplete="off"></label>
+        <label>Smallest dollar note you give as change
+          <select id="e-step"><option value="1">$1</option><option value="5">$5</option><option value="10">$10</option><option value="20">$20</option></select>
+        </label>
+      </div>
+      <p class="hint">Change is given in dollars down to this note, and the rest in Lebanese pounds. Press "Save menu" to save.</p>
     </div>
     <div class="panel span2">
       <div class="acts"><button class="btn primary" type="button" id="save-menu">Save menu</button><span id="save-msg" class="label"></span></div>

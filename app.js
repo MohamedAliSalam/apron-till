@@ -9,11 +9,13 @@ function newId(){ return 'i'+Date.now().toString(36)+Math.floor(Math.random()*1e
 /* ---------- storage: everything lives on this device ---------- */
 var K_CFG='apron.till.menu', K_ORD='apron.till.orders';
 var DEFAULT_MENU={tickets:[{id:'shift',name:'Shift',price:5},{id:'double',name:'Double Shift',price:6}],
-  addons:[{id:'shot',name:'Extra shot',price:1},{id:'flavour',name:'Flavour',price:1},{id:'matcha',name:'Matcha',price:1}]};
+  addons:[{id:'shot',name:'Extra shot',price:1},{id:'flavour',name:'Flavour',price:1},{id:'matcha',name:'Matcha',price:1}],
+  rate:89000,usdStep:5};
 function readJSON(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
 function writeJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
 function cleanMenu(m){ var ok=function(a){return (Array.isArray(a)?a:[]).filter(function(x){return x&&x.id&&str(x.name).trim();});};
-  return {tickets:ok(m&&m.tickets),addons:ok(m&&m.addons)}; }
+  var rate=Math.round(Number(m&&m.rate)), step=Number(m&&m.usdStep);
+  return {tickets:ok(m&&m.tickets),addons:ok(m&&m.addons),rate:rate>0?rate:89000,usdStep:[1,5,10,20].indexOf(step)>=0?step:5}; }
 var cfg, orders;
 /* cloud.on means orders and the menu come from the shared database instead of this device */
 var cloud={ready:false,on:false,user:null,db:null,unsub:[],pending:false}, pastOrders=null;
@@ -86,6 +88,25 @@ function renderChoices(){
   });
 }
 $('addbtn').addEventListener('click',function(){ var l=$('addons'); l.hidden=!l.hidden; this.setAttribute('aria-expanded',String(!l.hidden)); });
+function llFmt(n){ return Math.round(n).toLocaleString('en-US')+' LL'; }
+/* Works in Lebanese pounds so dollar and pound payments can be mixed. Change is split into
+   dollars (down to the smallest note set in Admin) and the rest in pounds, rounded to 1,000 LL. */
+function cashState(){
+  var total=orderTotal(), rate=cfg.rate, step=cfg.usdStep;
+  var rawU=$('received').value.trim(), rawL=$('received-ll').value.replace(/[^\d]/g,'');
+  var usd=Math.max(0,cents(rawU))/100, ll=parseInt(rawL,10)||0, empty=rawU===''&&rawL==='';
+  var totalLL=total/100*rate, paidLL=empty?totalLL:usd*rate+ll, diffLL=paidLL-totalLL;
+  var st={usd:empty?total/100:usd,ll:ll,paidUsd:Math.round(paidLL/rate*100)/100,owed:diffLL<-500,owedLL:0,usdBack:0,llBack:0,changeUsdTotal:0,text:'',maxUsd:0};
+  if(st.owed){ st.owedLL=-diffLL; return st; }
+  if(diffLL<500) return st;
+  st.changeUsdTotal=Math.round(diffLL/rate*100)/100;
+  st.maxUsd=Math.floor(diffLL/rate+1e-9);
+  var def=Math.floor(st.maxUsd/step)*step;
+  st.usdBack=Math.max(0,Math.min(st.maxUsd,def+(draft.usdAdj||0)*step));
+  st.llBack=Math.max(0,Math.round((diffLL-st.usdBack*rate)/1000)*1000);
+  st.text=[st.usdBack?'$'+st.usdBack:'',st.llBack?llFmt(st.llBack):''].filter(Boolean).join(' + ');
+  return st;
+}
 function renderSummary(){
   var t=ticket(), ul=$('lines'); ul.textContent='';
   if(!t){ ul.appendChild(el('li')).appendChild(el('span',null,'Pick a ticket to start')); }
@@ -93,33 +114,42 @@ function renderSummary(){
   var total=orderTotal(); $('total').textContent=money(total);
   var cash=draft.method==='cash'; $('cashbox').hidden=!cash;
   $('whishbox').hidden=draft.method!=='whish'; $('whish-total').textContent=money(total); showWhishQr(total);
-  var raw=$('received').value.trim(), rec=raw===''?total:cents(raw), diff=rec-total, box=$('changebox');
-  box.className='change'+(diff<0?' owed':diff>0?' back':'');
-  $('changelabel').textContent=diff<0?'Still owed':'Change to return';
-  $('change').textContent=money(Math.abs(diff));
-  $('place').disabled=!t||(cash&&diff<0);
+  var cs=cashState(), box=$('changebox');
+  $('total-ll').textContent=t?'= '+llFmt(total/100*cfg.rate)+' at '+cfg.rate.toLocaleString('en-US')+' LL per $1':'';
+  box.className='change'+(cs.owed?' owed':cs.text?' back':'');
+  $('changelabel').textContent=cs.owed?'Still owed':'Give back';
+  $('change').textContent=cs.owed?money(Math.ceil(cs.owedLL/cfg.rate*100))+' or '+llFmt(Math.ceil(cs.owedLL/1000)*1000):(cs.text||'Nothing');
+  $('splitbox').hidden=!(cs.maxUsd>0); $('split-note').textContent=cs.maxUsd>0?'Change is '+money(Math.round(cs.changeUsdTotal*100))+' in total':'';
+  $('place').disabled=!t||(cash&&cs.owed);
 }
-$('received').addEventListener('input',renderSummary);
-$('quick').addEventListener('click',function(e){ var q=e.target.dataset&&e.target.dataset.q; if(!q) return; $('received').value=q==='exact'?'':q; renderSummary(); });
+['received','received-ll'].forEach(function(id){ $(id).addEventListener('input',function(){ draft.usdAdj=0; renderSummary(); }); });
+$('usd-more').addEventListener('click',function(){ var c=cashState(); if(c.usdBack<c.maxUsd){ draft.usdAdj=(draft.usdAdj||0)+1; renderSummary(); } });
+$('usd-less').addEventListener('click',function(){ var c=cashState(); if(c.usdBack>0){ draft.usdAdj=Math.ceil(c.usdBack/cfg.usdStep)-1-Math.floor(c.maxUsd/cfg.usdStep); renderSummary(); } });
+$('quick').addEventListener('click',function(e){ var q=e.target.dataset&&e.target.dataset.q; if(!q) return; draft.usdAdj=0;
+  if(q==='exact'){ $('received').value=''; $('received-ll').value=''; }
+  else if(q==='exactll'){ $('received').value=''; $('received-ll').value=Math.round(orderTotal()/100*cfg.rate); }
+  else { $('received').value=q; $('received-ll').value=''; }
+  renderSummary(); });
 $('method').addEventListener('click',function(e){ var m=e.target.dataset&&e.target.dataset.m; if(!m) return; draft.method=m;
   [].forEach.call($('method').children,function(b){ b.setAttribute('aria-pressed',String(b.dataset.m===m)); }); renderSummary(); });
 function flash(msg,err){ var f=$('flash'); f.textContent=msg; f.className='flash'+(err?' err':''); f.hidden=false; }
 $('place').addEventListener('click',function(){
   var t=ticket(); if(!t) return;
-  var total=orderTotal(), cash=draft.method==='cash', raw=$('received').value.trim();
-  var rec=cash&&raw!==''?cents(raw):total; if(rec<total) return;
+  var total=orderTotal(), cash=draft.method==='cash', cs=cash?cashState():null;
+  if(cs&&cs.owed) return;
   loadAll();
   var today=dayKey(Date.now());
   var n=orders.filter(function(o){return o.day===today;}).reduce(function(m,o){return Math.max(m,Number(o.n)||0);},0)+1;
   var order=({id:newId(),n:n,day:today,createdAt:Date.now(),status:'new',
     ticket:{name:str(t.name),price:cents(t.price)/100},
     addons:chosenAddons().map(function(a){return {name:str(a.name),price:cents(a.price)/100};}),
-    total:total/100,method:draft.method,received:rec/100,change:(rec-total)/100,
+    total:total/100,method:draft.method,received:cs?cs.paidUsd:total/100,change:cs?cs.changeUsdTotal:0,
+    receivedUsd:cs?cs.usd:0,receivedLbp:cs?cs.ll:0,changeUsd:cs?cs.usdBack:0,changeLbp:cs?cs.llBack:0,rate:cfg.rate,
     name:$('c-name').value.trim(),phone:$('c-phone').value.trim(),note:$('c-note').value.trim()});
   if(!addOrder(order)){ flash('The order was not saved.',true); return; }
-  flash('Order #'+n+' is on the Orders screen.'+(rec>total?' Return '+money(rec-total)+'.':''));
+  flash('Order #'+n+' is on the Orders screen.'+(cs&&cs.text?' Give back '+cs.text+'.':''));
   draft.ticket=null; draft.addons={}; $('addons').hidden=true; $('addbtn').setAttribute('aria-expanded','false');
-  ['c-name','c-phone','c-note','received'].forEach(function(id){$(id).value='';});
+  draft.usdAdj=0; ['c-name','c-phone','c-note','received','received-ll'].forEach(function(id){$(id).value='';});
   renderAll();
 });
 
@@ -271,11 +301,13 @@ $('add-ticket').addEventListener('click',function(){ edit.tickets.push({id:newId
 $('add-addon').addEventListener('click',function(){ edit.addons.push({id:newId(),name:'',price:''}); dirty=true; renderEditor(); });
 $('save-menu').addEventListener('click',function(){
   var clean=function(arr){ return arr.filter(function(x){return str(x.name).trim();}).map(function(x){return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100};}); };
-  var body={tickets:clean(edit.tickets),addons:clean(edit.addons)};
+  var rate=parseInt(String($('e-rate').value).replace(/[^\d]/g,''),10)||cfg.rate;
+  var body={tickets:clean(edit.tickets),addons:clean(edit.addons),rate:rate,usdStep:Number($('e-step').value)||5};
   if(writeJSON(K_CFG,body)){ if(cloud.on) shop().collection('config').doc('menu').set(body).catch(syncErr); cfg=cleanMenu(body); dirty=false; loadEditor(); renderAll(); $('save-msg').textContent='Saved. The cashier tab is updated.'; }
   else $('save-msg').textContent='Not saved. This tablet’s storage is full or blocked.';
 });
-function loadEditor(){ edit={tickets:cfg.tickets.map(function(t){return {id:t.id,name:t.name,price:t.price};}),addons:cfg.addons.map(function(a){return {id:a.id,name:a.name,price:a.price};})}; renderEditor(); }
+function loadEditor(){ edit={tickets:cfg.tickets.map(function(t){return {id:t.id,name:t.name,price:t.price};}),addons:cfg.addons.map(function(a){return {id:a.id,name:a.name,price:a.price};})}; $('e-rate').value=cfg.rate; $('e-step').value=String(cfg.usdStep); renderEditor(); }
+['e-rate','e-step'].forEach(function(id){ $(id).addEventListener('input',function(){ dirty=true; }); $(id).addEventListener('change',function(){ dirty=true; }); });
 
 /* ---------- export, backup, reset ---------- */
 function saveFile(name,blob){
@@ -290,7 +322,9 @@ $('export').addEventListener('click',async function(){
   var rows=list.map(function(o){ var d=new Date(Number(o.createdAt)||0); return {
     'Order':Number(o.n)||'', 'Date':dayKey(d.getTime()), 'Time':('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2),
     'Ticket':str(o.ticket&&o.ticket.name), 'Add-ons':(Array.isArray(o.addons)?o.addons:[]).map(function(a){return str(a&&a.name);}).join(', '),
-    'Total ($)':Number(o.total)||0, 'Paid by':str(o.method), 'Received ($)':Number(o.received)||0, 'Change ($)':Number(o.change)||0,
+    'Total ($)':Number(o.total)||0, 'Paid by':str(o.method),
+    'Received ($)':o.receivedUsd!=null?Number(o.receivedUsd)||0:Number(o.received)||0, 'Received (LL)':Number(o.receivedLbp)||0,
+    'Change ($)':o.changeUsd!=null?Number(o.changeUsd)||0:Number(o.change)||0, 'Change (LL)':Number(o.changeLbp)||0, 'Rate (LL per $)':Number(o.rate)||'',
     'Name':str(o.name), 'Phone':str(o.phone), 'Note':str(o.note), 'Status':o.status==='done'?'Done':'Waiting' }; });
   var cust=customers(list).map(function(r){return {'Name':r.name,'Phone':r.phone,'Orders':r.count,'Spent ($)':r.spent/100};});
   var wb=XLSX.utils.book_new();
@@ -399,7 +433,7 @@ function goOnline(){
   var menuRef=shop().collection('config').doc('menu');
   cloud.unsub.push(menuRef.onSnapshot(function(snap){
     if(snap.exists){ cfg=cleanMenu(snap.data()); writeJSON(K_CFG,cfg); if(draft.ticket&&!ticket()) draft.ticket=null; if(!dirty) loadEditor(); renderAll(); }
-    else if(!snap.metadata.fromCache){ menuRef.set({tickets:cfg.tickets,addons:cfg.addons}).catch(syncErr); }
+    else if(!snap.metadata.fromCache){ menuRef.set(cfg).catch(syncErr); }
   },syncErr));
 }
 function goLocal(){
