@@ -16,6 +16,15 @@ body{margin:0}
 img{max-width:100%}
 [hidden]{display:none!important}
 .hint{color:var(--muted);max-width:70ch}
+.qrgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
+.qrcard{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center}
+.qrcard img{width:100%;background:#fff;border-radius:6px;padding:4px}
+.qrcard b{font-family:var(--display);font-size:1.6rem;line-height:1}
+.qrcard small{color:var(--muted)}
+.qrcard small.old{color:var(--bad);font-weight:600}
+#qr-amount{max-width:130px}
+.chk{flex-direction:row;align-items:center;gap:8px;font-weight:400}
+.chk input{width:auto}
 .qr{display:block;width:min(100%,260px);margin:0 auto;background:#fff;padding:10px;border-radius:12px}
 .sync{font-family:var(--body);font-weight:500;font-size:.75rem;letter-spacing:0;margin-left:14px;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.16);vertical-align:middle;white-space:nowrap}
 #sync-form input{max-width:240px}
@@ -186,8 +195,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         <div class="change" id="changebox"><span class="label" id="changelabel">Change to return</span><b id="change">$0</b></div>
       </div>
       <div class="group" id="whishbox" hidden>
-        <span class="label">Customer scans to pay</span>
+        <span class="label" id="whish-label">Customer scans to pay</span>
         <img id="whish-qr" class="qr" src="whish-qr.png" alt="Whish QR code">
+        <p class="hint" id="whish-note" style="text-align:center;margin:0 auto"></p>
         <p class="empty" id="whish-missing" hidden>The Whish QR code has not been added yet.</p>
         <div class="change"><span class="label">To pay by Whish</span><b id="whish-total">$0</b></div>
       </div>
@@ -239,6 +249,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     <div class="panel span2">
       <div class="wall-head" style="margin:0"><h2>Customers</h2><div class="acts"><span class="label" id="export-msg"></span><button class="btn primary" type="button" id="export">Export all orders to Excel</button><button class="btn" type="button" id="copy-cust">Copy list</button></div></div>
       <div class="tablewrap"><table><thead><tr><th>Name</th><th>Phone</th><th class="num">Orders</th></tr></thead><tbody id="cust"><tr><td colspan="3">Customers who give a name or number appear here.</td></tr></tbody></table></div>
+    </div>
+    <div class="panel span2">
+      <h2>Whish QR codes by amount</h2>
+      <p class="hint">Add one QR for each order total. When the cashier picks Whish, the QR that matches the total is shown. For any other total, your main QR is shown and the customer types the amount.</p>
+      <div class="qrgrid" id="qr-list"></div>
+      <div class="acts">
+        <input id="qr-amount" inputmode="decimal" autocomplete="off" placeholder="Total ($)" aria-label="Order total in dollars">
+        <label class="btn filebtn">Choose the QR image<input type="file" id="qr-file" accept="image/*" hidden></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="qr-expires" checked> Stop showing a QR 48 hours after it was added (Whish amount QRs expire)</label>
+      <p class="label" id="qr-msg"></p>
     </div>
     <div class="panel span2">
       <h2>Sync between devices</h2>

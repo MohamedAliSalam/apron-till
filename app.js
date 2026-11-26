@@ -92,7 +92,7 @@ function renderSummary(){
   else{ [t].concat(chosenAddons()).forEach(function(x,i){ var li=el('li'); li.appendChild(el('span',null,(i?'+ ':'')+str(x.name))); li.appendChild(el('span',null,money(cents(x.price)))); ul.appendChild(li); }); }
   var total=orderTotal(); $('total').textContent=money(total);
   var cash=draft.method==='cash'; $('cashbox').hidden=!cash;
-  $('whishbox').hidden=draft.method!=='whish'; $('whish-total').textContent=money(total);
+  $('whishbox').hidden=draft.method!=='whish'; $('whish-total').textContent=money(total); showWhishQr(total);
   var raw=$('received').value.trim(), rec=raw===''?total:cents(raw), diff=rec-total, box=$('changebox');
   box.className='change'+(diff<0?' owed':diff>0?' back':'');
   $('changelabel').textContent=diff<0?'Still owed':'Change to return';
@@ -123,9 +123,70 @@ $('place').addEventListener('click',function(){
   renderAll();
 });
 
-function qrMissing(){ $('whish-qr').hidden=true; $('whish-missing').hidden=false; }
+function qrMissing(){ if(shownQr&&shownQr!=='main') return; $('whish-qr').hidden=true; $('whish-missing').hidden=false; }
 $('whish-qr').addEventListener('error',qrMissing);
 if($('whish-qr').complete&&!$('whish-qr').naturalWidth) qrMissing();
+
+/* ---------- Whish QR codes by amount ---------- */
+var K_WQR='apron.till.whishqrs', K_WQX='apron.till.whishqr.keep', whishQrs=[], whishExpires=true, shownQr='';
+function loadQrsLocal(){ var a=readJSON(K_WQR); whishQrs=(Array.isArray(a)?a:[]).filter(function(q){return q&&q.img&&q.amount>0;}); whishExpires=readJSON(K_WQX)!==true; }
+function qrOld(q){ return whishExpires&&Date.now()-(Number(q.addedAt)||0)>48*3600*1000; }
+function qrFor(totalCents){ var q=whishQrs.filter(function(x){return cents(x.amount)===totalCents;})[0]; return q&&!qrOld(q)?q:null; }
+function showWhishQr(totalCents){
+  var q=totalCents>0?qrFor(totalCents):null, img=$('whish-qr'), key=q?'amount:'+q.amount+':'+q.addedAt:'main';
+  $('whish-label').textContent=q?'Customer scans to pay '+money(totalCents):'Customer scans to pay';
+  $('whish-note').textContent=q?'This QR already has the amount in it.':'The customer types the amount in Whish.';
+  if(key===shownQr) return; shownQr=key;
+  img.hidden=false; $('whish-missing').hidden=true; img.src=q?q.img:'whish-qr.png';
+}
+function saveQr(rec){
+  var id=String(cents(rec.amount));
+  whishQrs=whishQrs.filter(function(q){return String(cents(q.amount))!==id;}).concat([rec]); writeJSON(K_WQR,whishQrs);
+  if(cloud.on) shop().collection('whishqr').doc(id).set(rec).catch(syncErr);
+  shownQr=''; renderQrs(); renderSummary();
+}
+function removeQr(q){
+  var id=String(cents(q.amount));
+  whishQrs=whishQrs.filter(function(x){return String(cents(x.amount))!==id;}); writeJSON(K_WQR,whishQrs);
+  if(cloud.on) shop().collection('whishqr').doc(id).delete().catch(syncErr);
+  shownQr=''; renderQrs(); renderSummary();
+}
+function renderQrs(){
+  var box=$('qr-list'); box.textContent=''; $('qr-expires').checked=whishExpires;
+  if(!whishQrs.length) box.appendChild(el('p','empty','No amount QRs yet. Type a total, then choose its QR image.'));
+  whishQrs.slice().sort(function(a,b){return a.amount-b.amount;}).forEach(function(q){
+    var c=el('div','qrcard'), im=el('img'), hours=Math.floor((Date.now()-(Number(q.addedAt)||0))/3600000);
+    im.src=q.img; im.alt='Whish QR for '+money(cents(q.amount)); c.appendChild(im);
+    c.appendChild(el('b',null,money(cents(q.amount))));
+    c.appendChild(el('small',qrOld(q)?'old':null,qrOld(q)?'Not shown: older than 48 hours':hours<1?'Added just now':hours<24?'Added '+hours+' h ago':'Added '+Math.floor(hours/24)+' d ago'));
+    var b=el('button','link','Remove'); b.type='button'; b.addEventListener('click',function(){ removeQr(q); }); c.appendChild(b);
+    box.appendChild(c);
+  });
+}
+function shrinkImage(file){
+  return new Promise(function(ok,no){
+    var r=new FileReader(); r.onerror=no;
+    r.onload=function(){ var im=new Image(); im.onerror=no; im.onload=function(){
+      var k=Math.min(1,640/Math.max(im.width,im.height)), c=document.createElement('canvas'); c.width=Math.round(im.width*k); c.height=Math.round(im.height*k);
+      var g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(im,0,0,c.width,c.height);
+      var out=c.toDataURL('image/png'); if(out.length>450000) out=c.toDataURL('image/jpeg',.9); ok(out);
+    }; im.src=r.result; };
+    r.readAsDataURL(file);
+  });
+}
+$('qr-file').addEventListener('change',async function(){
+  var f=this.files&&this.files[0], msg=$('qr-msg'), amt=cents($('qr-amount').value); this.value='';
+  if(!f) return;
+  if(amt<=0){ msg.textContent='Type the order total first, then choose the image.'; return; }
+  try{ var img=await shrinkImage(f); saveQr({amount:amt/100,img:img,addedAt:Date.now()}); $('qr-amount').value=''; msg.textContent='Saved the QR for '+money(amt)+'.'; }
+  catch(e){ msg.textContent='That file could not be read as an image.'; }
+});
+$('qr-expires').addEventListener('change',function(){
+  whishExpires=this.checked; writeJSON(K_WQX,!whishExpires);
+  if(cloud.on) shop().collection('config').doc('whish').set({expires:whishExpires}).catch(syncErr);
+  shownQr=''; renderQrs(); renderSummary();
+});
+loadQrsLocal();
 
 /* ---------- orders wall ---------- */
 function setStatus(id,status){
@@ -326,6 +387,15 @@ function goOnline(){
     orders=snap.docs.map(function(d){ var o=d.data()||{}; return Object.assign({},o,{id:d.id,createdAt:Number(o.createdAt)||0}); });
     cloud.pending=snap.metadata.hasPendingWrites; renderAll(); renderSync();
   },syncErr));
+  cloud.unsub.push(shop().collection('whishqr').onSnapshot(function(snap){
+    if(snap.empty&&!snap.metadata.fromCache&&whishQrs.length&&!cloud.qrSeeded){ cloud.qrSeeded=true; whishQrs.forEach(function(q){ shop().collection('whishqr').doc(String(cents(q.amount))).set(q).catch(syncErr); }); return; }
+    if(snap.metadata.fromCache&&snap.empty) return;
+    cloud.qrSeeded=true;
+    whishQrs=snap.docs.map(function(d){return d.data();}).filter(function(q){return q&&q.img&&q.amount>0;}); writeJSON(K_WQR,whishQrs); shownQr=''; renderQrs(); renderSummary();
+  },syncErr));
+  cloud.unsub.push(shop().collection('config').doc('whish').onSnapshot(function(snap){
+    if(!snap.exists) return; whishExpires=snap.data().expires!==false; writeJSON(K_WQX,!whishExpires); shownQr=''; renderQrs(); renderSummary();
+  },syncErr));
   var menuRef=shop().collection('config').doc('menu');
   cloud.unsub.push(menuRef.onSnapshot(function(snap){
     if(snap.exists){ cfg=cleanMenu(snap.data()); writeJSON(K_CFG,cfg); if(draft.ticket&&!ticket()) draft.ticket=null; if(!dirty) loadEditor(); renderAll(); }
@@ -359,7 +429,7 @@ window.addEventListener('online',renderSync); window.addEventListener('offline',
 
 /* ---------- boot ---------- */
 function renderAll(){ renderChoices(); renderSummary(); renderWall(); renderToday(); }
-loadEditor(); renderAll(); renderSync(); startCloud();
+loadEditor(); renderAll(); renderQrs(); renderSync(); startCloud();
 /* a second window on the same tablet (for example the Orders screen) stays in step */
 window.addEventListener('storage',function(e){ if(e.key!==K_ORD&&e.key!==K_CFG) return; loadAll(); if(draft.ticket&&!ticket()) draft.ticket=null; if(!dirty) loadEditor(); renderAll(); });
 if(!writeJSON('apron.till.probe',1)) warn('This browser is blocking storage, so orders cannot be saved. Leave private browsing mode and reload.');
