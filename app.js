@@ -15,9 +15,34 @@ function writeJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return 
 function cleanMenu(m){ var ok=function(a){return (Array.isArray(a)?a:[]).filter(function(x){return x&&x.id&&str(x.name).trim();});};
   return {tickets:ok(m&&m.tickets),addons:ok(m&&m.addons)}; }
 var cfg, orders;
+/* cloud.on means orders and the menu come from the shared database instead of this device */
+var cloud={ready:false,on:false,user:null,db:null,unsub:[],pending:false}, pastOrders=null;
+function localOrders(){ var o=readJSON(K_ORD); return (Array.isArray(o)?o:[]).filter(function(x){return x&&x.id;}); }
 function loadAll(){
-  var m=readJSON(K_CFG); cfg=cleanMenu(m||DEFAULT_MENU);
-  var o=readJSON(K_ORD); orders=(Array.isArray(o)?o:[]).filter(function(x){return x&&x.id;});
+  if(cloud.on) return;
+  var m=readJSON(K_CFG); cfg=cleanMenu(m||DEFAULT_MENU); orders=localOrders();
+}
+function shop(){ return cloud.db.collection('shops').doc('main'); }
+function syncErr(e){ warn(e&&e.code==='permission-denied'?'Sync was refused for this login. Check the shop login in Admin.':'Sync hit a problem. Orders are kept on this device and will be sent when it clears.'); }
+function addOrder(o){
+  if(cloud.on){ shop().collection('orders').doc(o.id).set(o).catch(syncErr); return true; }
+  orders.push(o); if(saveOrders()) return true; orders.pop(); return false;
+}
+function cloudWrite(ops){
+  for(var i=0;i<ops.length;i+=400){
+    var b=cloud.db.batch();
+    ops.slice(i,i+400).forEach(function(op){ var ref=shop().collection('orders').doc(op[1].id); if(op[0]==='delete') b.delete(ref); else b.set(ref,op[1]); });
+    b.commit().catch(syncErr);
+  }
+}
+/* everything ever taken: the live list only covers the last day and a half when synced */
+function histList(){
+  if(!cloud.on||!pastOrders) return orders;
+  var seen={}, out=[]; orders.concat(pastOrders).forEach(function(o){ if(!seen[o.id]){ seen[o.id]=true; out.push(o); } }); return out;
+}
+async function refreshHistory(){
+  if(!cloud.on) return;
+  try{ var snap=await shop().collection('orders').get(); pastOrders=snap.docs.map(function(d){return Object.assign({},d.data(),{id:d.id});}); }catch(e){}
 }
 function saveOrders(){ var ok=writeJSON(K_ORD,orders); if(!ok) warn('This tablet could not save the order. Its storage may be full or blocked. Export your orders, then free up space.'); return ok; }
 function warn(msg){ var s=$('status'); s.textContent=msg; s.hidden=!msg; }
@@ -85,12 +110,12 @@ $('place').addEventListener('click',function(){
   loadAll();
   var today=dayKey(Date.now());
   var n=orders.filter(function(o){return o.day===today;}).reduce(function(m,o){return Math.max(m,Number(o.n)||0);},0)+1;
-  orders.push({id:newId(),n:n,day:today,createdAt:Date.now(),status:'new',
+  var order=({id:newId(),n:n,day:today,createdAt:Date.now(),status:'new',
     ticket:{name:str(t.name),price:cents(t.price)/100},
     addons:chosenAddons().map(function(a){return {name:str(a.name),price:cents(a.price)/100};}),
     total:total/100,method:draft.method,received:rec/100,change:(rec-total)/100,
     name:$('c-name').value.trim(),phone:$('c-phone').value.trim(),note:$('c-note').value.trim()});
-  if(!saveOrders()){ orders.pop(); flash('The order was not saved.',true); return; }
+  if(!addOrder(order)){ flash('The order was not saved.',true); return; }
   flash('Order #'+n+' is on the Orders screen.'+(rec>total?' Return '+money(rec-total)+'.':''));
   draft.ticket=null; draft.addons={}; $('addons').hidden=true; $('addbtn').setAttribute('aria-expanded','false');
   ['c-name','c-phone','c-note','received'].forEach(function(id){$(id).value='';});
@@ -99,6 +124,7 @@ $('place').addEventListener('click',function(){
 
 /* ---------- orders wall ---------- */
 function setStatus(id,status){
+  if(cloud.on){ shop().collection('orders').doc(id).update(status==='done'?{status:'done',doneAt:Date.now()}:{status:'new'}).catch(syncErr); return; }
   loadAll(); var o=orders.filter(function(x){return x.id===id;})[0]; if(!o) return;
   o.status=status; if(status==='done') o.doneAt=Date.now(); saveOrders(); renderAll();
 }
@@ -150,7 +176,7 @@ function renderToday(){
   $('t-wait').textContent=orders.filter(function(o){return o.status==='new';}).length;
   var by=function(m){return money(sum(list.filter(function(o){return o.method===m;})));};
   $('t-split').textContent='Cash '+by('cash')+'  ·  Card '+by('card')+'  ·  Whish '+by('whish');
-  var rows=customers(orders.slice().sort(function(a,b){return b.createdAt-a.createdAt;}));
+  var rows=customers(histList().slice().sort(function(a,b){return b.createdAt-a.createdAt;}));
   var tb=$('cust'); tb.textContent='';
   if(!rows.length){ var tr=el('tr'), td=el('td',null,'Customers who give a name or number appear here.'); td.colSpan=3; tr.appendChild(td); tb.appendChild(tr); }
   rows.forEach(function(r){ var tr=el('tr'); tr.appendChild(el('td',null,r.name||'—')); tr.appendChild(el('td',null,r.phone||'—')); tr.appendChild(el('td','num',r.count)); tb.appendChild(tr); });
@@ -180,7 +206,7 @@ $('add-addon').addEventListener('click',function(){ edit.addons.push({id:newId()
 $('save-menu').addEventListener('click',function(){
   var clean=function(arr){ return arr.filter(function(x){return str(x.name).trim();}).map(function(x){return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100};}); };
   var body={tickets:clean(edit.tickets),addons:clean(edit.addons)};
-  if(writeJSON(K_CFG,body)){ cfg=cleanMenu(body); dirty=false; loadEditor(); renderAll(); $('save-msg').textContent='Saved. The cashier tab is updated.'; }
+  if(writeJSON(K_CFG,body)){ if(cloud.on) shop().collection('config').doc('menu').set(body).catch(syncErr); cfg=cleanMenu(body); dirty=false; loadEditor(); renderAll(); $('save-msg').textContent='Saved. The cashier tab is updated.'; }
   else $('save-msg').textContent='Not saved. This tablet’s storage is full or blocked.';
 });
 function loadEditor(){ edit={tickets:cfg.tickets.map(function(t){return {id:t.id,name:t.name,price:t.price};}),addons:cfg.addons.map(function(a){return {id:a.id,name:a.name,price:a.price};})}; renderEditor(); }
@@ -190,10 +216,11 @@ function saveFile(name,blob){
   var a=document.createElement('a'), url=URL.createObjectURL(blob); a.href=url; a.download=name; document.body.appendChild(a); a.click();
   setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },2000);
 }
-$('export').addEventListener('click',function(){
+$('export').addEventListener('click',async function(){
   var msg=$('export-msg');
   if(!window.XLSX){ msg.textContent='The Excel export did not load. Reload the app and try again.'; return; }
-  var list=orders.slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});
+  await refreshHistory();
+  var list=histList().slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});
   var rows=list.map(function(o){ var d=new Date(Number(o.createdAt)||0); return {
     'Order':Number(o.n)||'', 'Date':dayKey(d.getTime()), 'Time':('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2),
     'Ticket':str(o.ticket&&o.ticket.name), 'Add-ons':(Array.isArray(o.addons)?o.addons:[]).map(function(a){return str(a&&a.name);}).join(', '),
@@ -207,9 +234,10 @@ $('export').addEventListener('click',function(){
   saveFile('apron-orders-'+dayKey(Date.now())+'.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
   msg.textContent='Exported '+rows.length+' orders.';
 });
-$('backup').addEventListener('click',function(){
-  saveFile('apron-backup-'+dayKey(Date.now())+'.json',new Blob([JSON.stringify({app:'apron-till',savedAt:Date.now(),menu:cfg,orders:orders})],{type:'application/json'}));
-  $('backup-msg').textContent='Backup saved with '+orders.length+' orders.';
+$('backup').addEventListener('click',async function(){
+  await refreshHistory(); var all=histList();
+  saveFile('apron-backup-'+dayKey(Date.now())+'.json',new Blob([JSON.stringify({app:'apron-till',savedAt:Date.now(),menu:cfg,orders:all})],{type:'application/json'}));
+  $('backup-msg').textContent='Backup saved with '+all.length+' orders.';
 });
 $('restore').addEventListener('change',function(){
   var f=this.files&&this.files[0], input=this; if(!f) return;
@@ -217,18 +245,23 @@ $('restore').addEventListener('change',function(){
   r.onload=function(){
     try{
       var d=JSON.parse(r.result); if(!d||d.app!=='apron-till'||!Array.isArray(d.orders)) throw 0;
-      var have={}; orders.forEach(function(o){have[o.id]=true;});
-      var added=0; d.orders.forEach(function(o){ if(o&&o.id&&!have[o.id]){ orders.push(o); added++; } });
-      saveOrders(); renderAll(); $('backup-msg').textContent='Restored '+added+' orders that were not already on this tablet.';
+      var have={}; histList().forEach(function(o){have[o.id]=true;});
+      var fresh=d.orders.filter(function(o){ return o&&o.id&&!have[o.id]; }), added=fresh.length;
+      if(cloud.on) cloudWrite(fresh.map(function(o){return ['set',o];})); else { orders=orders.concat(fresh); saveOrders(); }
+      renderAll(); $('backup-msg').textContent='Restored '+added+' orders that were not already here.';
     }catch(e){ $('backup-msg').textContent='That file is not an Apron backup.'; }
     input.value='';
   };
   r.readAsText(f);
 });
 function wipeUI(open){ $('wipe').hidden=open; $('wipe-yes').hidden=!open; $('wipe-no').hidden=!open; }
-$('wipe').addEventListener('click',function(){ wipeUI(true); $('backup-msg').textContent='This removes all '+orders.length+' orders from this tablet and cannot be undone. Export or back up first.'; });
+$('wipe').addEventListener('click',function(){ wipeUI(true); $('backup-msg').textContent=cloud.on?'This removes every order from all synced devices and cannot be undone. Export or back up first.':'This removes all '+orders.length+' orders from this tablet and cannot be undone. Export or back up first.'; });
 $('wipe-no').addEventListener('click',function(){ wipeUI(false); $('backup-msg').textContent=''; });
-$('wipe-yes').addEventListener('click',function(){ orders=[]; saveOrders(); wipeUI(false); renderAll(); $('backup-msg').textContent='All orders deleted.'; });
+$('wipe-yes').addEventListener('click',async function(){
+  if(cloud.on){ await refreshHistory(); cloudWrite(histList().map(function(o){return ['delete',o];})); pastOrders=[]; }
+  else { orders=[]; saveOrders(); }
+  wipeUI(false); renderAll(); $('backup-msg').textContent='All orders deleted.';
+});
 
 /* ---------- admin password ---------- */
 var K_PASS='apron.till.pass', unlocked=false, changing=false;
@@ -262,14 +295,66 @@ $('lock-form').addEventListener('submit',async function(e){
     unlocked=true;
   }
   $('lock-pass').value=''; $('lock-pass2').value=''; msg.textContent=''; renderLock();
+  if(cloud.on) refreshHistory().then(renderToday);
 });
 $('lock-now').addEventListener('click',lockAdmin);
 $('lock-change').addEventListener('click',function(){ changing=true; renderLock(); $('lock-pass').focus(); });
 renderLock();
 
+/* ---------- sync between devices (optional) ---------- */
+function renderSync(){
+  var dot=$('syncdot'), hint=$('sync-hint'), form=$('sync-form'), off=$('sync-off');
+  form.hidden=true; off.hidden=true; dot.textContent='Saved on this device';
+  if(!window.APRON_FIREBASE){ hint.textContent='Sync is not set up yet. Orders stay on this device only.'; return; }
+  if(!cloud.ready){ hint.textContent='Sync has not started. Connect to the internet once and reload the app.'; return; }
+  if(!cloud.user){ hint.textContent='Sign in with the shop login to share orders between your devices. Orders already on this device are sent up when you do.'; form.hidden=false; return; }
+  off.hidden=false;
+  dot.textContent=!navigator.onLine?'Offline, will sync':cloud.pending?'Syncing\u2026':'Synced';
+  hint.textContent='Sync is on as '+str(cloud.user.email)+'. Orders are shared with every device signed in with this login.';
+}
+function goOnline(){
+  if(cloud.on) return; cloud.on=true; pastOrders=null;
+  var mine=localOrders();
+  if(mine.length) Promise.all(mine.map(function(o){ return shop().collection('orders').doc(o.id).set(o); })).then(function(){ writeJSON(K_ORD,[]); },syncErr);
+  orders=mine;
+  cloud.unsub.push(shop().collection('orders').where('createdAt','>=',Date.now()-36*3600*1000).onSnapshot({includeMetadataChanges:true},function(snap){
+    orders=snap.docs.map(function(d){ var o=d.data()||{}; return Object.assign({},o,{id:d.id,createdAt:Number(o.createdAt)||0}); });
+    cloud.pending=snap.metadata.hasPendingWrites; renderAll(); renderSync();
+  },syncErr));
+  var menuRef=shop().collection('config').doc('menu');
+  cloud.unsub.push(menuRef.onSnapshot(function(snap){
+    if(snap.exists){ cfg=cleanMenu(snap.data()); writeJSON(K_CFG,cfg); if(draft.ticket&&!ticket()) draft.ticket=null; if(!dirty) loadEditor(); renderAll(); }
+    else if(!snap.metadata.fromCache){ menuRef.set({tickets:cfg.tickets,addons:cfg.addons}).catch(syncErr); }
+  },syncErr));
+}
+function goLocal(){
+  cloud.unsub.forEach(function(u){ try{u();}catch(e){} }); cloud.unsub=[]; cloud.on=false; cloud.pending=false; pastOrders=null; loadAll(); renderAll();
+}
+function loadScript(src){ return new Promise(function(ok,no){ var s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=no; document.head.appendChild(s); }); }
+async function startCloud(){
+  if(!window.APRON_FIREBASE) return;
+  try{
+    var base='https://www.gstatic.com/firebasejs/10.12.2/firebase-';
+    await loadScript(base+'app-compat.js'); await loadScript(base+'auth-compat.js'); await loadScript(base+'firestore-compat.js');
+    firebase.initializeApp(window.APRON_FIREBASE);
+    cloud.db=firebase.firestore();
+    try{ await cloud.db.enablePersistence({synchronizeTabs:true}); }catch(e){}
+    cloud.ready=true;
+    firebase.auth().onAuthStateChanged(function(u){ cloud.user=u; if(u) goOnline(); else if(cloud.on) goLocal(); renderSync(); });
+  }catch(e){ renderSync(); }
+}
+$('sync-form').addEventListener('submit',function(e){
+  e.preventDefault(); var msg=$('sync-msg'), b=$('sync-go'); if(!cloud.ready) return;
+  b.disabled=true; msg.textContent='Signing in\u2026';
+  firebase.auth().signInWithEmailAndPassword($('sync-email').value.trim(),$('sync-pass').value).then(function(){ $('sync-pass').value=''; msg.textContent=''; },
+    function(err){ msg.textContent=err&&err.code==='auth/network-request-failed'?'No internet. Connect and try again.':'Wrong email or password.'; }).then(function(){ b.disabled=false; });
+});
+$('sync-off').addEventListener('click',function(){ if(cloud.ready) firebase.auth().signOut(); });
+window.addEventListener('online',renderSync); window.addEventListener('offline',renderSync);
+
 /* ---------- boot ---------- */
 function renderAll(){ renderChoices(); renderSummary(); renderWall(); renderToday(); }
-loadEditor(); renderAll();
+loadEditor(); renderAll(); renderSync(); startCloud();
 /* a second window on the same tablet (for example the Orders screen) stays in step */
 window.addEventListener('storage',function(e){ if(e.key!==K_ORD&&e.key!==K_CFG) return; loadAll(); if(draft.ticket&&!ticket()) draft.ticket=null; if(!dirty) loadEditor(); renderAll(); });
 if(!writeJSON('apron.till.probe',1)) warn('This browser is blocking storage, so orders cannot be saved. Leave private browsing mode and reload.');

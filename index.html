@@ -16,6 +16,8 @@ body{margin:0}
 img{max-width:100%}
 [hidden]{display:none!important}
 .hint{color:var(--muted);max-width:70ch}
+.sync{font-family:var(--body);font-weight:500;font-size:.75rem;letter-spacing:0;margin-left:14px;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.16);vertical-align:middle;white-space:nowrap}
+#sync-form input{max-width:240px}
 .admin.locked>.panel:not(#admin-lock){display:none}
 .admin:not(.locked)>#admin-lock{display:none}
 #lock-form input{max-width:240px}
@@ -139,7 +141,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 <body>
 <header class="bar">
   <div class="wrap barin">
-    <span class="mark">APRON<small>TILL</small></span>
+    <span class="mark">APRON<small>TILL</small><span class="sync" id="syncdot">Saved on this device</span></span>
     <nav id="tabs">
       <a href="#cashier" data-v="cashier" class="on">Cashier</a>
       <a href="#orders" data-v="orders">Orders<b id="qcount" hidden></b></a>
@@ -233,6 +235,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <div class="tablewrap"><table><thead><tr><th>Name</th><th>Phone</th><th class="num">Orders</th></tr></thead><tbody id="cust"><tr><td colspan="3">Customers who give a name or number appear here.</td></tr></tbody></table></div>
     </div>
     <div class="panel span2">
+      <h2>Sync between devices</h2>
+      <p class="hint" id="sync-hint">Sync is not set up yet. Orders stay on this device only.</p>
+      <form id="sync-form" class="acts" hidden>
+        <input type="email" id="sync-email" autocomplete="username" placeholder="Shop email" aria-label="Shop email">
+        <input type="password" id="sync-pass" autocomplete="current-password" placeholder="Shop password" aria-label="Shop password">
+        <button class="btn primary" type="submit" id="sync-go">Turn on sync</button>
+      </form>
+      <div class="acts"><button class="btn" type="button" id="sync-off" hidden>Turn off sync on this device</button></div>
+      <p class="label" id="sync-msg"></p>
+    </div>
+    <div class="panel span2">
       <h2>Admin password</h2>
       <div class="acts"><button class="btn" type="button" id="lock-now">Lock Admin now</button><button class="btn" type="button" id="lock-change">Change password</button></div>
     </div>
@@ -251,6 +264,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   </section>
 </main>
 <script src="xlsx.full.min.js"></script>
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

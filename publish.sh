@@ -7,5 +7,8 @@ cd "$(dirname "$0")"
 TOKEN="$(gh auth token --user MohamedAliSalam)"
 git add -A
 git diff --cached --quiet || git -c user.name="MohamedAliSalam" -c user.email="102904729+MohamedAliSalam@users.noreply.github.com" commit -q -m "Update till ($(date +%Y-%m-%d))"
-git push -q "https://x-access-token:${TOKEN}@github.com/MohamedAliSalam/apron-till.git" HEAD:main
+URL="https://x-access-token:${TOKEN}@github.com/MohamedAliSalam/apron-till.git"
+# GitHub commits to the CNAME file itself when the custom domain is re-saved; pick those up first.
+git fetch -q "$URL" main && git -c user.name="MohamedAliSalam" -c user.email="102904729+MohamedAliSalam@users.noreply.github.com" rebase -q FETCH_HEAD
+git push -q "$URL" HEAD:main
 echo "Published to https://apron.mohamedalisalam.com (updates within a minute or two)."
