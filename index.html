@@ -16,6 +16,9 @@ body{margin:0}
 img{max-width:100%}
 [hidden]{display:none!important}
 .hint{color:var(--muted);max-width:70ch}
+.admin.locked>.panel:not(#admin-lock){display:none}
+.admin:not(.locked)>#admin-lock{display:none}
+#lock-form input{max-width:240px}
 .btn.danger{color:var(--bad);border-color:var(--bad)}
 .filebtn{flex-direction:row;display:inline-flex;font-size:1rem;font-weight:600}
 /* Layout: a tablet till. Top bar with three tabs; Cashier is a two-pane order builder, Orders is a wall of large cards, Admin is plain forms. */
@@ -192,7 +195,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     <ul class="donelist" id="donelist"><li><span>Nothing finished yet.</span></li></ul>
   </section>
 
-  <section id="v-admin" class="admin" hidden>
+  <section id="v-admin" class="admin locked" hidden>
+    <div class="panel span2" id="admin-lock">
+      <h2 id="lock-title">Admin password</h2>
+      <p class="hint" id="lock-hint"></p>
+      <form id="lock-form" class="acts">
+        <input type="password" id="lock-pass" autocomplete="off" placeholder="Password" aria-label="Password">
+        <input type="password" id="lock-pass2" autocomplete="off" placeholder="Repeat password" aria-label="Repeat password" hidden>
+        <button class="btn primary" type="submit" id="lock-go">Unlock</button>
+      </form>
+      <p class="label" id="lock-msg"></p>
+    </div>
     <div class="panel span2">
       <h2>Today</h2>
       <div class="tiles">
@@ -218,6 +231,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     <div class="panel span2">
       <div class="wall-head" style="margin:0"><h2>Customers</h2><div class="acts"><span class="label" id="export-msg"></span><button class="btn primary" type="button" id="export">Export all orders to Excel</button><button class="btn" type="button" id="copy-cust">Copy list</button></div></div>
       <div class="tablewrap"><table><thead><tr><th>Name</th><th>Phone</th><th class="num">Orders</th></tr></thead><tbody id="cust"><tr><td colspan="3">Customers who give a name or number appear here.</td></tr></tbody></table></div>
+    </div>
+    <div class="panel span2">
+      <h2>Admin password</h2>
+      <div class="acts"><button class="btn" type="button" id="lock-now">Lock Admin now</button><button class="btn" type="button" id="lock-change">Change password</button></div>
     </div>
     <div class="panel span2">
       <h2>Backup and reset</h2>

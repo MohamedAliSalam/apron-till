@@ -31,6 +31,7 @@ var edit=null, dirty=false;
 function showView(){
   var v=(location.hash||'').replace('#',''); if(['cashier','orders','admin'].indexOf(v)<0) v='cashier';
   ['cashier','orders','admin'].forEach(function(k){ $('v-'+k).hidden=k!==v; });
+  if(v!=='admin'&&typeof lockAdmin==='function') lockAdmin();
   [].forEach.call(document.querySelectorAll('#tabs a'),function(a){ a.classList.toggle('on',a.dataset.v===v); });
 }
 window.addEventListener('hashchange',showView); showView();
@@ -228,6 +229,43 @@ function wipeUI(open){ $('wipe').hidden=open; $('wipe-yes').hidden=!open; $('wip
 $('wipe').addEventListener('click',function(){ wipeUI(true); $('backup-msg').textContent='This removes all '+orders.length+' orders from this tablet and cannot be undone. Export or back up first.'; });
 $('wipe-no').addEventListener('click',function(){ wipeUI(false); $('backup-msg').textContent=''; });
 $('wipe-yes').addEventListener('click',function(){ orders=[]; saveOrders(); wipeUI(false); renderAll(); $('backup-msg').textContent='All orders deleted.'; });
+
+/* ---------- admin password ---------- */
+var K_PASS='apron.till.pass', unlocked=false, changing=false;
+/* The starting password is stored only as a salted hash. Change it in Admin. */
+var DEFAULT_PASS={salt:'apron-default-0cc024592e7a5668',hash:'320ec9d823bd7f16feeda0399dc209ac605ddd155605e6ae91bf7927cecd8b4d'};
+function passRec(){ var p=readJSON(K_PASS); return p&&p.salt&&p.hash?p:DEFAULT_PASS; }
+async function hashPass(p,salt){
+  var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+':'+p));
+  return [].map.call(new Uint8Array(buf),function(b){return ('0'+b.toString(16)).slice(-2);}).join('');
+}
+function renderLock(){
+  var setting=!passRec()||changing;
+  $('v-admin').classList.toggle('locked',!unlocked||changing);
+  $('lock-title').textContent=changing?'Change the admin password':setting?'Set an admin password':'Admin is locked';
+  $('lock-hint').textContent=setting?'Choose a password of at least 4 characters and write it down. It protects prices, the customer list, exports and resets on this tablet.':'Enter the admin password to see sales, customers and the menu.';
+  $('lock-pass2').hidden=!setting; $('lock-go').textContent=setting?'Save password':'Unlock';
+}
+function lockAdmin(){ if(!unlocked&&!changing) return; unlocked=false; changing=false; $('lock-pass').value=''; $('lock-pass2').value=''; $('lock-msg').textContent=''; renderLock(); }
+$('lock-form').addEventListener('submit',async function(e){
+  e.preventDefault();
+  var p=$('lock-pass').value, msg=$('lock-msg'), rec=passRec();
+  if(!window.crypto||!crypto.subtle){ msg.textContent='The password lock needs the secure (https) address.'; return; }
+  if(!rec||changing){
+    if(p.length<4){ msg.textContent='Use at least 4 characters.'; return; }
+    if(p!==$('lock-pass2').value){ msg.textContent='The two passwords do not match.'; return; }
+    var salt=newId()+newId();
+    if(!writeJSON(K_PASS,{salt:salt,hash:await hashPass(p,salt)})){ msg.textContent='The password could not be saved on this tablet.'; return; }
+    changing=false; unlocked=true;
+  }else{
+    if(await hashPass(p,rec.salt)!==rec.hash){ msg.textContent='Wrong password.'; $('lock-pass').value=''; return; }
+    unlocked=true;
+  }
+  $('lock-pass').value=''; $('lock-pass2').value=''; msg.textContent=''; renderLock();
+});
+$('lock-now').addEventListener('click',lockAdmin);
+$('lock-change').addEventListener('click',function(){ changing=true; renderLock(); $('lock-pass').focus(); });
+renderLock();
 
 /* ---------- boot ---------- */
 function renderAll(){ renderChoices(); renderSummary(); renderWall(); renderToday(); }
