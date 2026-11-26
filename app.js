@@ -92,6 +92,7 @@ function renderSummary(){
   else{ [t].concat(chosenAddons()).forEach(function(x,i){ var li=el('li'); li.appendChild(el('span',null,(i?'+ ':'')+str(x.name))); li.appendChild(el('span',null,money(cents(x.price)))); ul.appendChild(li); }); }
   var total=orderTotal(); $('total').textContent=money(total);
   var cash=draft.method==='cash'; $('cashbox').hidden=!cash;
+  $('whishbox').hidden=draft.method!=='whish'; $('whish-total').textContent=money(total);
   var raw=$('received').value.trim(), rec=raw===''?total:cents(raw), diff=rec-total, box=$('changebox');
   box.className='change'+(diff<0?' owed':diff>0?' back':'');
   $('changelabel').textContent=diff<0?'Still owed':'Change to return';
@@ -121,6 +122,10 @@ $('place').addEventListener('click',function(){
   ['c-name','c-phone','c-note','received'].forEach(function(id){$(id).value='';});
   renderAll();
 });
+
+function qrMissing(){ $('whish-qr').hidden=true; $('whish-missing').hidden=false; }
+$('whish-qr').addEventListener('error',qrMissing);
+if($('whish-qr').complete&&!$('whish-qr').naturalWidth) qrMissing();
 
 /* ---------- orders wall ---------- */
 function setStatus(id,status){
@@ -175,7 +180,7 @@ function renderToday(){
   $('t-orders').textContent=list.length; $('t-sales').textContent=money(sum(list));
   $('t-wait').textContent=orders.filter(function(o){return o.status==='new';}).length;
   var by=function(m){return money(sum(list.filter(function(o){return o.method===m;})));};
-  $('t-split').textContent='Cash '+by('cash')+'  ·  Card '+by('card')+'  ·  Whish '+by('whish');
+  $('t-split').textContent='Cash '+by('cash')+'  ·  Whish '+by('whish');
   var rows=customers(histList().slice().sort(function(a,b){return b.createdAt-a.createdAt;}));
   var tb=$('cust'); tb.textContent='';
   if(!rows.length){ var tr=el('tr'), td=el('td',null,'Customers who give a name or number appear here.'); td.colSpan=3; tr.appendChild(td); tb.appendChild(tr); }

@@ -16,6 +16,7 @@ body{margin:0}
 img{max-width:100%}
 [hidden]{display:none!important}
 .hint{color:var(--muted);max-width:70ch}
+.qr{display:block;width:min(100%,260px);margin:0 auto;background:#fff;padding:10px;border-radius:12px}
 .sync{font-family:var(--body);font-weight:500;font-size:.75rem;letter-spacing:0;margin-left:14px;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.16);vertical-align:middle;white-space:nowrap}
 #sync-form input{max-width:240px}
 .admin.locked>.panel:not(#admin-lock){display:none}
@@ -174,7 +175,6 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <div class="group"><span class="label">Paid by</span>
         <div class="seg" id="method">
           <button type="button" data-m="cash" aria-pressed="true">Cash</button>
-          <button type="button" data-m="card" aria-pressed="false">Card</button>
           <button type="button" data-m="whish" aria-pressed="false">Whish</button>
         </div>
       </div>
@@ -184,6 +184,12 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
           <button type="button" data-q="exact">Exact</button><button type="button" data-q="10">$10</button><button type="button" data-q="20">$20</button><button type="button" data-q="50">$50</button><button type="button" data-q="100">$100</button>
         </div>
         <div class="change" id="changebox"><span class="label" id="changelabel">Change to return</span><b id="change">$0</b></div>
+      </div>
+      <div class="group" id="whishbox" hidden>
+        <span class="label">Customer scans to pay</span>
+        <img id="whish-qr" class="qr" src="whish-qr.png" alt="Whish QR code">
+        <p class="empty" id="whish-missing" hidden>The Whish QR code has not been added yet.</p>
+        <div class="change"><span class="label">To pay by Whish</span><b id="whish-total">$0</b></div>
       </div>
       <button class="big" type="button" id="place" disabled>Send order</button>
       <p class="flash" id="flash" hidden></p>
