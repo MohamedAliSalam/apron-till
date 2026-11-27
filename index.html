@@ -172,11 +172,43 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .btn[aria-pressed="true"]{background:var(--orange);border-color:var(--orange);color:var(--on-orange)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 a.btn{text-decoration:none;display:inline-block}
+/* cashier: three columns that fill one tablet screen, so nothing scrolls */
+.till3{display:grid;grid-template-columns:1.55fr 1fr;gap:12px;align-items:stretch}
+.step{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0}
+.drinktitle{font-family:var(--display);font-size:2rem;text-transform:uppercase;letter-spacing:.03em;line-height:1}
+.till3 .col{gap:10px;padding:14px;min-height:0;min-width:0}
+.dgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start;overflow:auto;min-height:0}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.xgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-content:start;overflow:auto;min-height:0}
+.choice.tile{min-height:100px;padding:12px 14px;justify-content:center}
+.choice.tile b{font-size:1.5rem;overflow-wrap:anywhere}
+.choice.tile span{font-size:.95rem}
+.choice.tile span{font-size:.85rem}
+.choice.temp{min-height:96px;align-items:center;text-align:center;justify-content:center}
+.choice.temp b{font-size:2rem}
+.till3 .selbox{margin-top:auto;padding:14px;flex-wrap:nowrap}
+.till3 .selbox .big{flex:none;font-size:1.5rem;padding:16px 28px}
+.rowhead{display:flex;justify-content:space-between;align-items:center}
+.cartwrap{flex:1;min-height:70px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.cartwrap .flash{padding:8px 10px;font-size:.95rem}
+.fields3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.fields3 input{padding:9px 10px;min-width:0}
+.payrow{display:flex;gap:12px;align-items:center}
+.payrow .qr{width:118px;margin:0;padding:6px;border-radius:8px;flex:none}
+.payinfo{display:flex;flex-direction:column;gap:2px;min-width:0}
+.payinfo b{font-family:var(--display);font-size:2.6rem;line-height:1;font-variant-numeric:tabular-nums}
+.till3 .total{padding-top:6px}
+.till3 .total b{font-size:2.2rem}
+.till3 .hint.ll{margin-top:-8px;font-size:.85rem}
+main[data-v="cashier"]{padding-block:10px}
+@media (min-width:900px) and (min-height:520px){
+  .till3{height:calc(100dvh - var(--barh,58px) - 20px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+}
+@media (max-width:899px){ .till3{grid-template-columns:1fr} .dgrid,.xgrid{grid-template-columns:repeat(2,1fr)} .till3 .selbox{flex-wrap:wrap} }
+.row.item{grid-template-columns:1fr 92px 92px 40px}
 .catgroup{display:flex;flex-direction:column;gap:8px}
 #menu{display:flex;flex-direction:column;gap:18px}
 .lines2{list-style:none;margin:0;padding:0;font-family:var(--display);font-weight:700;text-transform:uppercase;font-size:1.5rem;letter-spacing:.03em;line-height:1.15}
-.row.item{grid-template-columns:1fr 150px 96px 40px}
-@media (max-width:620px){ .row.item{grid-template-columns:1fr 96px 40px} .row.item input.cat{grid-column:1/-1;order:5} }
 </style>
 </head>
 <body>
@@ -193,33 +225,44 @@ a.btn{text-decoration:none;display:inline-block}
 <div class="wrap"><p class="status" id="status" hidden></p></div>
 
 <main class="wrap">
-  <section id="v-cashier" class="till">
-    <div class="panel">
-      <div id="menu"></div>
-    </div>
-    <div class="panel">
-      <div class="selbox">
-        <div class="selinfo"><span class="label">Selected</span><b id="sel-name">Nothing selected</b><span id="sel-price">Tap a drink to select it</span></div>
-        <button class="big" type="button" id="add-sel" disabled>Add to order</button>
+  <section id="v-cashier" class="till3">
+    <div class="panel col">
+      <!-- the menu; tapping a drink swaps this for that drink's options -->
+      <div class="step" id="step-list">
+        <span class="label">Menu</span>
+        <div class="dgrid" id="drinks"></div>
       </div>
-      <span class="label">This order</span>
-      <ul class="cart" id="cart"><li class="none">Nothing added yet.</li></ul>
+      <div class="step" id="step-drink" hidden>
+        <div class="rowhead"><button class="btn" type="button" id="back">← Menu</button><b class="drinktitle" id="drink-title"></b></div>
+        <span class="label">Hot or iced</span>
+        <div class="tgrid" id="temps"></div>
+        <span class="label">Add-ons</span>
+        <div class="xgrid" id="extras"></div>
+        <div class="selbox">
+          <div class="selinfo"><b id="sel-name">Nothing selected</b><span id="sel-price"></span></div>
+          <button class="big" type="button" id="add-sel" disabled>Add to order</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel col">
+      <div class="rowhead"><span class="label">This order</span><button class="link" type="button" id="clear-cart">Clear</button></div>
+      <div class="cartwrap">
+        <p class="flash" id="flash" hidden></p>
+        <ul class="cart" id="cart"><li class="none">Nothing added yet.</li></ul>
+      </div>
       <div class="discrow"><button class="btn" type="button" id="disc" aria-pressed="false" disabled>10% off</button><span id="disc-amt"></span></div>
       <div class="total"><span class="label">Total</span><b id="total">$0</b></div>
       <p class="hint ll" id="total-ll"></p>
-      <div class="fields">
-        <label>Name<input id="c-name" autocomplete="off" placeholder="Name for the order"></label>
-        <label>Phone number<input id="c-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="78 123 456"></label>
-        <label class="full">Note for the barista<input id="c-note" autocomplete="off" placeholder="Oat milk, first time…"></label>
+      <div class="fields3">
+        <input id="c-name" autocomplete="off" placeholder="Name" aria-label="Customer name">
+        <input id="c-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="Phone" aria-label="Customer phone number">
+        <input id="c-note" autocomplete="off" placeholder="Note" aria-label="Note for the barista">
       </div>
-      <div class="group" id="paybox">
-        <span class="label">Customer pays with MyMonty</span>
+      <div class="payrow">
         <img id="pay-qr" class="qr" src="monty-qr.png" alt="MyMonty QR code" hidden>
-        <div class="change"><span class="label">To pay</span><b id="pay-total">$0</b></div>
+        <div class="payinfo"><span class="label">Customer pays with MyMonty</span><b id="pay-total">$0</b></div>
       </div>
       <button class="big" type="button" id="place" disabled>Paid, send order</button>
-      <div class="acts"><button class="link" type="button" id="clear-cart">Clear this order</button></div>
-      <p class="flash" id="flash" hidden></p>
     </div>
   </section>
 
@@ -252,9 +295,8 @@ a.btn{text-decoration:none;display:inline-block}
     </div>
     <div class="panel span2">
       <h2>Drinks</h2>
-      <p class="hint">One row per drink: its name, the group it sits under on the cashier screen, and its price in dollars.</p>
+      <p class="hint">One row per drink: its name, its hot price and its iced price in dollars. Leave a price empty if you do not sell the drink that way. With both filled, the cashier chooses hot or iced.</p>
       <div class="rows" id="e-items"></div>
-      <datalist id="cats"></datalist>
       <div class="acts"><button class="btn" type="button" id="add-item">Add a drink</button></div>
       <h2 style="margin-top:12px">Extras</h2>
       <p class="hint">Add-ons for a drink, such as an extra shot. The cashier picks one drink, then any number of extras for it.</p>

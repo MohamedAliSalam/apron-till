@@ -13,20 +13,33 @@ function readJSON(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e)
 function writeJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
 /* A menu is a flat list of items, each with a group. Older saved menus had "tickets" and
    "add-ons"; those are carried over as items so nothing disappears. */
+function priceOrNull(v){ var c=cents(v); return c>0?c/100:null; }
+/* A drink has a hot price, an iced price, or both. An extra has one price and cat "Extras". */
 function cleanMenu(m){
-  var take=function(arr,cat){ return (Array.isArray(arr)?arr:[]).filter(function(x){return x&&x.id&&str(x.name).trim();})
-    .map(function(x){ return {id:str(x.id),name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:str(x.cat).trim()||cat}; }); };
-  var items=take(m&&m.items,'Drinks');
-  if(!items.length&&m) items=take(m.tickets,'Drinks').concat(take(m.addons,'Extras'));
+  var out=[];
+  var push=function(x,cat){
+    if(!x||!x.id||!str(x.name).trim()) return;
+    var c=str(x.cat).trim()||cat||'', id=str(x.id), name=str(x.name).trim();
+    if(/^(extras?|add-?ons?)$/i.test(c)){ out.push({id:id,name:name,price:Math.max(0,cents(x.price))/100,cat:'Extras'}); return; }
+    var hot=priceOrNull(x.hot), iced=priceOrNull(x.iced);
+    if(hot==null&&iced==null) hot=Math.max(0,cents(x.price))/100;   /* older menus had a single price */
+    out.push({id:id,name:name,hot:hot,iced:iced});
+  };
+  (Array.isArray(m&&m.items)?m.items:[]).forEach(function(x){ push(x); });
+  if(!out.length&&m){ (Array.isArray(m.tickets)?m.tickets:[]).forEach(function(x){ push(x,'Drinks'); }); (Array.isArray(m.addons)?m.addons:[]).forEach(function(x){ push(x,'Extras'); }); }
   var rate=Math.round(Number(m&&m.rate));
-  return {items:items,rate:rate>0?rate:89000};
+  return {items:out,rate:rate>0?rate:89000};
 }
 var cfg, orders;
 /* cloud.on means orders and the menu come from the shared database instead of this device */
 var cloud={ready:false,on:false,user:null,db:null,unsub:[],pending:false}, pastOrders=null;
 function localOrders(){ var o=readJSON(K_ORD); return (Array.isArray(o)?o:[]).filter(function(x){return x&&x.id;}); }
 /* shown on a device that has no saved menu yet and is not signed in to sync */
-var DEFAULT_MENU={"items":[{"id":"espresso","name":"Espresso","price":2,"cat":"Hot"},{"id":"americano","name":"Americano","price":2.5,"cat":"Hot"},{"id":"flat-white","name":"Flat White","price":3,"cat":"Hot"},{"id":"latte","name":"Latte","price":4,"cat":"Hot"},{"id":"spanish-latte","name":"Spanish Latte","price":5,"cat":"Hot"},{"id":"hot-chocolate","name":"Hot Chocolate","price":4.5,"cat":"Hot"},{"id":"iced-americano","name":"Iced Americano","price":3,"cat":"Iced"},{"id":"iced-latte","name":"Iced Latte","price":4,"cat":"Iced"},{"id":"iced-spanish-latte","name":"Iced Spanish Latte","price":5,"cat":"Iced"},{"id":"matcha-latte","name":"Matcha Latte","price":5,"cat":"Matcha"},{"id":"dirty-matcha","name":"Dirty Matcha","price":6,"cat":"Matcha"},{"id":"strawberry-matcha","name":"Strawberry Matcha","price":6,"cat":"Matcha"},{"id":"mango-matcha","name":"Mango Matcha","price":6,"cat":"Matcha"},{"id":"vanilla","name":"Vanilla","price":1,"cat":"Extras"},{"id":"caramel","name":"Caramel","price":1,"cat":"Extras"},{"id":"hazelnut","name":"Hazelnut","price":1,"cat":"Extras"},{"id":"pumpkin-spice","name":"Pumpkin Spice","price":1,"cat":"Extras"},{"id":"tiramisu","name":"Tiramisu","price":1,"cat":"Extras"},{"id":"cinnamon","name":"Cinnamon","price":1,"cat":"Extras"},{"id":"toffenut","name":"Toffenut","price":1,"cat":"Extras"},{"id":"espresso-shot","name":"Espresso Shot","price":1,"cat":"Extras"},{"id":"we-make-it-for-you","name":"We make it for you","price":1,"cat":"Extras"}],"rate":89000};
+var DEFAULT_MENU={items:[
+  {id:'espresso',name:'Espresso',hot:2},{id:'americano',name:'Americano',hot:2.5,iced:3},{id:'flat-white',name:'Flat White',hot:3},
+  {id:'latte',name:'Latte',hot:4,iced:4},{id:'spanish-latte',name:'Spanish Latte',hot:5,iced:5},{id:'hot-chocolate',name:'Hot Chocolate',hot:4},
+  {id:'matcha',name:'Matcha',hot:5,iced:5},{id:'dirty-matcha',name:'Dirty Matcha',hot:6,iced:6},{id:'strawberry-matcha',name:'Strawberry Matcha',hot:6},{id:'mango-matcha',name:'Mango Matcha',hot:6},
+  {id:'syrup',name:'Syrup',price:1,cat:'Extras'},{id:'espresso-shot',name:'Espresso Shot',price:1,cat:'Extras'},{id:'we-make-it',name:'We make it',price:1,cat:'Extras'}],rate:89000};
 function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)||DEFAULT_MENU); orders=localOrders(); }
 function saveOrders(){ var ok=writeJSON(K_ORD,orders); if(!ok) warn('This device could not save the order. Its storage may be full or blocked. Export your orders, then free up space.'); return ok; }
 function warn(msg){ var s=$('status'); s.textContent=msg; s.hidden=!msg; }
@@ -56,73 +69,89 @@ loadAll();
 if(navigator.storage&&navigator.storage.persist){ try{ navigator.storage.persist(); }catch(e){} }
 
 var cart=[];            /* [{id, qty}] in the order the cashier added them */
-var sel=null, selExtras={}, warned=false;   /* the drink tapped but not yet added; nothing joins the order until Add to order is tapped */
+var sel=null, selTemp=null, selExtras={}, warned=false;   /* the drink tapped but not yet added; nothing joins the order until Add to order is tapped */
 var edit=null, dirty=false;
 
 /* ---------- tabs ---------- */
 function showView(){
   var v=(location.hash||'').replace('#',''); if(['cashier','orders','admin'].indexOf(v)<0) v='cashier';
   ['cashier','orders','admin'].forEach(function(k){ $('v-'+k).hidden=k!==v; });
+  document.querySelector('main').dataset.v=v;
   if(v!=='admin'&&typeof lockAdmin==='function') lockAdmin();
   [].forEach.call(document.querySelectorAll('#tabs a'),function(a){ a.classList.toggle('on',a.dataset.v===v); });
 }
 window.addEventListener('hashchange',showView); showView();
 
 /* ---------- cashier ---------- */
+/* One screen, three steps: pick a drink, pick hot or iced, tick any extras, then Add to order.
+   Nothing joins the order until Add to order is tapped. */
 function item(id){ return cfg.items.filter(function(x){return x.id===id;})[0]||null; }
-/* Items in a group called Extras (or Add-ons) are not drinks: they attach to the selected drink. */
-function isExtra(it){ return /^(extras?|add-?ons?)$/i.test(str(it&&it.cat).trim()); }
-function lineKey(id,extras){ return id+'|'+extras.slice().sort().join(','); }
+function isExtra(it){ return !!it&&it.cat==='Extras'; }
+function temps(it){ var t=[]; if(it&&it.hot!=null) t.push('hot'); if(it&&it.iced!=null) t.push('iced'); return t; }
+function drinkName(it,temp){ return temps(it).length>1?(temp==='iced'?'Iced ':'Hot ')+it.name:it.name; }
+function lineKey(id,temp,extras){ return id+'|'+temp+'|'+extras.slice().sort().join(','); }
 function cartLines(){
-  return cart.map(function(c){ var it=item(c.id); if(!it) return null;
-    var ex=(c.extras||[]).map(item).filter(Boolean);
-    var unit=cents(it.price)+ex.reduce(function(a,e){return a+cents(e.price);},0);
-    return {key:c.key,id:it.id,name:it.name,base:it.price,extras:ex.map(function(e){return {name:e.name,price:e.price};}),price:unit/100,qty:c.qty};
+  return cart.map(function(c){ var it=item(c.id); if(!it||isExtra(it)||it[c.temp]==null) return null;
+    var ex=(c.extras||[]).map(item).filter(isExtra);
+    var unit=cents(it[c.temp])+ex.reduce(function(a,e){return a+cents(e.price);},0);
+    return {key:c.key,id:it.id,temp:c.temp,name:drinkName(it,c.temp),base:it[c.temp],extras:ex.map(function(e){return {name:e.name,price:e.price};}),price:unit/100,qty:c.qty};
   }).filter(Boolean);
 }
 var DISCOUNT_PCT=10, discount=false;   /* the cashier's "10% off" button, off again after every order */
 function orderSubtotal(){ return cartLines().reduce(function(s,l){ return s+cents(l.price)*l.qty; },0); }
 function orderDiscount(){ return discount?Math.round(orderSubtotal()*DISCOUNT_PCT/100):0; }
 function orderTotal(){ return orderSubtotal()-orderDiscount(); }
-function bump(key,by,id,extras){
+function bump(key,by,line){
   var c=cart.filter(function(x){return x.key===key;})[0];
-  if(!c){ if(by>0) cart.push({key:key,id:id,extras:extras||[],qty:by}); }
+  if(!c){ if(by>0&&line) cart.push({key:key,id:line.id,temp:line.temp,extras:line.extras,qty:by}); }
   else { c.qty+=by; if(c.qty<=0) cart=cart.filter(function(x){return x!==c;}); }
   renderMenu(); renderSummary();
 }
+function pickedExtras(){ return cfg.items.filter(function(x){return isExtra(x)&&selExtras[x.id];}); }
 function renderMenu(){
-  var box=$('menu'); box.textContent='';
-  if(!cfg.items.length){ box.appendChild(el('p','empty','The menu is empty. Add your drinks in the Admin tab.')); return; }
-  var cats=[]; cfg.items.forEach(function(it){ if(cats.indexOf(it.cat)<0) cats.push(it.cat); });
-  cats.forEach(function(cat){
-    var g=el('div','catgroup'); g.appendChild(el('span','label',cat));
-    var grid=el('div','choices');
-    cfg.items.filter(function(it){return it.cat===cat;}).forEach(function(it){
-      var extra=isExtra(it), count=cart.reduce(function(n,c){ return n+(c.id===it.id?c.qty:0); },0);
-      var b=el('button','choice'+(extra?' small':'')); b.type='button';
-      b.setAttribute('aria-pressed',String(extra?!!selExtras[it.id]:sel===it.id));
-      b.appendChild(el('b',null,it.name)); b.appendChild(el('span',null,(extra?'+':'')+money(cents(it.price))));
-      if(extra){ b.disabled=!sel; }
-      else if(count) b.appendChild(el('span','badge',count));
-      b.addEventListener('click',function(){
-        if(extra){ if(!sel) return; selExtras[it.id]=!selExtras[it.id]; } else { sel=it.id; }
-        warned=false; renderMenu(); renderSummary();
-      });
-      grid.appendChild(b);
-    });
-    g.appendChild(grid); box.appendChild(g);
+  var chosen=sel?item(sel):null; if(!chosen||isExtra(chosen)){ sel=null; selTemp=null; chosen=null; }
+  if(chosen&&temps(chosen).indexOf(selTemp)<0) selTemp=temps(chosen).length===1?temps(chosen)[0]:null;
+  $('step-list').hidden=!!chosen; $('step-drink').hidden=!chosen; $('drink-title').textContent=chosen?chosen.name:'';
+  var dbox=$('drinks'); dbox.textContent='';
+  var list=cfg.items.filter(function(x){return !isExtra(x);});
+  if(!list.length) dbox.appendChild(el('p','empty','No drinks yet. Add them in the Admin tab.'));
+  list.forEach(function(it){
+    var count=cart.reduce(function(n,c){ return n+(c.id===it.id?c.qty:0); },0), t=temps(it);
+    var b=el('button','choice tile'); b.type='button'; b.setAttribute('aria-pressed',String(sel===it.id));
+    b.appendChild(el('b',null,it.name));
+    b.appendChild(el('span',null,t.length>1&&it.hot!==it.iced?money(cents(it.hot))+' / '+money(cents(it.iced)):money(cents(it[t[0]]))));
+    if(count) b.appendChild(el('span','badge',count));
+    b.addEventListener('click',function(){ sel=it.id; selTemp=t.length===1?t[0]:null; selExtras={}; warned=false; renderMenu(); renderSummary(); });
+    dbox.appendChild(b);
   });
+  var tbox=$('temps'); tbox.textContent='';
+  [['hot','Hot'],['iced','Iced']].forEach(function(p){
+    var has=!!chosen&&chosen[p[0]]!=null, b=el('button','choice temp'); b.type='button'; b.disabled=!has;
+    b.setAttribute('aria-pressed',String(has&&selTemp===p[0]));
+    b.appendChild(el('b',null,p[1])); b.appendChild(el('span',null,has?money(cents(chosen[p[0]])):chosen?'Not sold':'—'));
+    b.addEventListener('click',function(){ if(!has) return; selTemp=p[0]; warned=false; renderMenu(); renderSummary(); });
+    tbox.appendChild(b);
+  });
+  var xbox=$('extras'); xbox.textContent='';
+  var exs=cfg.items.filter(isExtra);
+  if(!exs.length) xbox.appendChild(el('p','empty','No extras.'));
+  exs.forEach(function(it){
+    var b=el('button','choice tile'); b.type='button'; b.disabled=!chosen; b.setAttribute('aria-pressed',String(!!selExtras[it.id]));
+    b.appendChild(el('b',null,it.name)); b.appendChild(el('span',null,'+'+money(cents(it.price))));
+    b.addEventListener('click',function(){ if(!sel) return; selExtras[it.id]=!selExtras[it.id]; warned=false; renderMenu(); renderSummary(); });
+    xbox.appendChild(b);
+  });
+  var picked=chosen?pickedExtras():[];
+  var ready=!!chosen&&!!selTemp;
+  var selTotal=ready?cents(chosen[selTemp])+picked.reduce(function(a,e){return a+cents(e.price);},0):0;
+  $('sel-name').textContent=!chosen?'Nothing selected':(selTemp?drinkName(chosen,selTemp):chosen.name)+(picked.length?' + '+picked.map(function(e){return e.name;}).join(' + '):'');
+  $('sel-price').textContent=!chosen?'':!selTemp?'Choose hot or iced':money(selTotal);
+  $('add-sel').disabled=!ready;
 }
 function renderSummary(){
-  cart=cart.filter(function(c){return item(c.id);});
   var lines=cartLines(), ul=$('cart'); ul.textContent='';
-  var chosen=sel?item(sel):null; if(!chosen||isExtra(chosen)){ sel=null; chosen=null; }
-  var picked=chosen?cfg.items.filter(function(x){return isExtra(x)&&selExtras[x.id];}):[];
-  var selTotal=chosen?cents(chosen.price)+picked.reduce(function(a,e){return a+cents(e.price);},0):0;
-  $('sel-name').textContent=chosen?chosen.name:'Nothing selected';
-  $('sel-price').textContent=!chosen?'Tap a drink to select it':picked.length?'+ '+picked.map(function(e){return e.name;}).join(', ')+'  =  '+money(selTotal):money(selTotal)+'  ·  tap any extras, then add';
-  $('add-sel').disabled=!chosen;
-  if(!lines.length) ul.appendChild(el('li','none','Nothing added yet.'));
+  cart=cart.filter(function(c){ return lines.some(function(l){return l.key===c.key;}); });
+  if(!lines.length){ discount=false; ul.appendChild(el('li','none','Nothing added yet.')); }
   lines.forEach(function(l){
     var li=el('li'), nm=el('span','nm',l.name); nm.appendChild(el('small',null,(l.extras.length?'+ '+l.extras.map(function(e){return e.name;}).join(', ')+'  ·  ':'')+money(cents(l.price))+' each'));
     var q=el('span','qty'), minus=el('button',null,'−'), plus=el('button',null,'+');
@@ -131,22 +160,23 @@ function renderSummary(){
     q.appendChild(minus); q.appendChild(el('b',null,l.qty)); q.appendChild(plus);
     li.appendChild(nm); li.appendChild(q); li.appendChild(el('span',null,money(cents(l.price)*l.qty))); ul.appendChild(li);
   });
-  if(!lines.length) discount=false;
   var total=orderTotal(), off=orderDiscount();
   $('disc').disabled=!lines.length; $('disc').setAttribute('aria-pressed',String(discount));
   $('disc-amt').textContent=off?'−'+money(off)+' off '+money(orderSubtotal()):'';
   $('total').textContent=money(total); $('pay-total').textContent=money(total);
-  $('total-ll').textContent=total?'= '+llFmt(total/100*cfg.rate)+' at '+cfg.rate.toLocaleString('en-US')+' LL per $1':'';
+  $('total-ll').textContent=total?'= '+llFmt(total/100*cfg.rate):'';
   $('place').disabled=!lines.length;
 }
 $('add-sel').addEventListener('click',function(){
-  if(!sel) return;
-  var id=sel, ex=cfg.items.filter(function(x){return isExtra(x)&&selExtras[x.id];}).map(function(x){return x.id;});
-  sel=null; selExtras={}; warned=false; bump(lineKey(id,ex),1,id,ex);
+  var it=sel?item(sel):null; if(!it||!selTemp) return;
+  var ex=pickedExtras().map(function(x){return x.id;}), line={id:it.id,temp:selTemp,extras:ex};
+  sel=null; selTemp=null; selExtras={}; warned=false; $('flash').hidden=true;
+  bump(lineKey(line.id,line.temp,ex),1,line);
 });
+$('back').addEventListener('click',function(){ sel=null; selTemp=null; selExtras={}; warned=false; renderMenu(); renderSummary(); });
 $('disc').addEventListener('click',function(){ discount=!discount; warned=false; renderSummary(); });
-function clearOrder(){ discount=false; cart=[]; sel=null; selExtras={}; warned=false; ['c-name','c-phone','c-note'].forEach(function(id){$(id).value='';}); renderMenu(); renderSummary(); }
-$('clear-cart').addEventListener('click',clearOrder);
+function clearOrder(){ discount=false; cart=[]; sel=null; selTemp=null; selExtras={}; warned=false; ['c-name','c-phone','c-note'].forEach(function(id){$(id).value='';}); renderMenu(); renderSummary(); }
+$('clear-cart').addEventListener('click',function(){ $('flash').hidden=true; clearOrder(); });
 function flash(msg,err){ var f=$('flash'); f.textContent=msg; f.className='flash'+(err?' err':''); f.hidden=false; }
 $('place').addEventListener('click',function(){
   var lines=cartLines(); if(!lines.length) return;
@@ -157,16 +187,19 @@ $('place').addEventListener('click',function(){
   var today=dayKey(Date.now());
   var n=orders.filter(function(o){return o.day===today;}).reduce(function(m,o){return Math.max(m,Number(o.n)||0);},0)+1;
   var order={id:newId(),n:n,day:today,createdAt:Date.now(),status:'new',
-    items:lines.map(function(l){return {name:l.name,price:l.price,qty:l.qty,base:l.base,extras:l.extras};}),
+    items:lines.map(function(l){return {name:l.name,price:l.price,qty:l.qty,base:l.base,extras:l.extras,temp:l.temp};}),
     subtotal:subtotal/100,discount:off/100,discountPct:off?DISCOUNT_PCT:0,total:total/100,method:'mymonty',rate:cfg.rate,
     name:$('c-name').value.trim(),phone:$('c-phone').value.trim(),note:$('c-note').value.trim()};
   if(!addOrder(order)){ flash('The order was not saved.',true); return; }
-  flash('Order #'+n+' is on the Orders screen. '+money(total)+' by MyMonty.');
   clearOrder(); renderAll();
+  flash('Order #'+n+' sent to the Orders screen. '+money(total)+' by MyMonty.');
 });
 var payQr=$('pay-qr');
 payQr.addEventListener('load',function(){ payQr.hidden=false; });
 if(payQr.complete&&payQr.naturalWidth) payQr.hidden=false;
+/* tell the layout how tall the top bar is, so the cashier fills exactly one screen */
+function fitScreen(){ var bar=document.querySelector('.bar'); if(bar) document.documentElement.style.setProperty('--barh',bar.offsetHeight+'px'); }
+window.addEventListener('resize',fitScreen); fitScreen();
 
 /* ---------- orders wall ---------- */
 /* what an order contains, old one-ticket orders included */
@@ -236,47 +269,41 @@ function renderToday(){
   };
 }
 function renderEditor(){
-  var dl=$('cats'), cats=[]; dl.textContent='';
-  edit.items.forEach(function(it){ var c=str(it.cat).trim(); if(c&&!isExtra(it)&&cats.indexOf(c)<0) cats.push(c); });
-  cats.forEach(function(c){ var o=el('option'); o.value=c; dl.appendChild(o); });
   [[false,'e-items','No drinks yet. Add your first one below.'],[true,'e-extras','No extras yet.']].forEach(function(part){
     var extras=part[0], box=$(part[1]); box.textContent='';
     var list=edit.items.filter(function(it){ return isExtra(it)===extras; });
     if(!list.length) box.appendChild(el('p','empty',part[2]));
     list.forEach(function(it){
-      var row=el('div',extras?'row':'row item'), name=el('input'), price=el('input'), del=el('button',null,'\u00d7');
+      var row=el('div',extras?'row':'row item'), name=el('input'), del=el('button',null,'×');
+      var field=function(key,label){ var f=el('input'); f.value=it[key]==null||it[key]===''?'':str(it[key]); f.placeholder=label; f.inputMode='decimal'; f.id='e-'+key+'-'+it.id; f.setAttribute('aria-label',label+' price in dollars');
+        f.addEventListener('input',function(){ it[key]=f.value; dirty=true; }); return f; };
       name.value=str(it.name); name.placeholder=extras?'Extra name':'Drink name'; name.id='e-n-'+it.id; name.setAttribute('aria-label',extras?'Extra name':'Drink name');
-      price.value=it.price===''?'':str(it.price); price.placeholder='$'; price.inputMode='decimal'; price.id='e-p-'+it.id; price.setAttribute('aria-label','Price in dollars');
       name.addEventListener('input',function(){ it.name=name.value; dirty=true; });
-      price.addEventListener('input',function(){ it.price=price.value; dirty=true; });
       del.type='button'; del.setAttribute('aria-label','Remove '+str(it.name));
       del.addEventListener('click',function(){ edit.items.splice(edit.items.indexOf(it),1); dirty=true; renderEditor(); });
       row.appendChild(name);
-      if(!extras){
-        var cat=el('input','cat'); cat.value=str(it.cat); cat.placeholder='Group'; cat.id='e-c-'+it.id; cat.setAttribute('list','cats'); cat.setAttribute('aria-label','Group');
-        cat.addEventListener('input',function(){ it.cat=cat.value; dirty=true; }); row.appendChild(cat);
-      }
-      row.appendChild(price); row.appendChild(del); box.appendChild(row);
+      if(extras) row.appendChild(field('price','$')); else { row.appendChild(field('hot','Hot $')); row.appendChild(field('iced','Iced $')); }
+      row.appendChild(del); box.appendChild(row);
     });
   });
 }
 function addRow(extras){
-  var drinks=edit.items.filter(function(it){return !isExtra(it);}), last=drinks[drinks.length-1];
-  edit.items.push({id:newId(),name:'',price:'',cat:extras?'Extras':(last?last.cat:'Drinks')}); dirty=true; renderEditor();
+  edit.items.push(extras?{id:newId(),name:'',price:'',cat:'Extras'}:{id:newId(),name:'',hot:'',iced:''}); dirty=true; renderEditor();
   var rows=$(extras?'e-extras':'e-items').querySelectorAll('.row'); if(rows.length) rows[rows.length-1].querySelector('input').focus();
 }
 $('add-item').addEventListener('click',function(){ addRow(false); });
 $('add-extra').addEventListener('click',function(){ addRow(true); });
 $('e-rate').addEventListener('input',function(){ dirty=true; });
 $('save-menu').addEventListener('click',function(){
-  var items=edit.items.filter(function(x){return str(x.name).trim();}).map(function(x){ return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:str(x.cat).trim()||'Drinks'}; });
+  var named=edit.items.filter(function(x){return str(x.name).trim();});
+  var items=named.filter(function(x){return !isExtra(x);}).map(function(x){ return {id:x.id,name:str(x.name).trim(),hot:priceOrNull(x.hot),iced:priceOrNull(x.iced)}; })
+    .concat(named.filter(isExtra).map(function(x){ return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:'Extras'}; }));
   var rate=parseInt(String($('e-rate').value).replace(/[^\d]/g,''),10)||cfg.rate;
-  items=items.filter(function(x){return !isExtra(x);}).concat(items.filter(isExtra));
   var body={items:items,rate:rate};
   if(writeJSON(K_CFG,body)){ if(cloud.on) shop().collection('config').doc('menu').set(body).catch(syncErr); cfg=cleanMenu(body); dirty=false; loadEditor(); renderAll(); $('save-msg').textContent='Saved. The cashier tab is updated.'; }
   else $('save-msg').textContent='Not saved. This device’s storage is full or blocked.';
 });
-function loadEditor(){ edit={items:cfg.items.map(function(t){return {id:t.id,name:t.name,price:t.price,cat:t.cat};})}; $('e-rate').value=cfg.rate; renderEditor(); }
+function loadEditor(){ edit={items:cfg.items.map(function(t){ return isExtra(t)?{id:t.id,name:t.name,price:t.price,cat:'Extras'}:{id:t.id,name:t.name,hot:t.hot,iced:t.iced}; })}; $('e-rate').value=cfg.rate; renderEditor(); }
 
 /* ---------- export, backup, reset ---------- */
 /* On a phone or tablet that can share files, open the share sheet (Save to Files, WhatsApp, email).
@@ -442,4 +469,9 @@ loadEditor(); renderAll(); renderSync(); startCloud();
 /* a second window on the same device (for example the Orders screen) stays in step */
 window.addEventListener('storage',function(e){ if(e.key!==K_ORD&&e.key!==K_CFG) return; loadAll(); if(!dirty) loadEditor(); renderAll(); });
 if(!writeJSON('apron.till.probe',1)) warn('This browser is blocking storage, so orders cannot be saved. Leave private browsing mode and reload.');
-if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
+if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
+  /* when a new version takes over while the app is open, reload to it, unless an order is being built */
+  var hadWorker=!!navigator.serviceWorker.controller, reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',function(){ if(hadWorker&&!reloaded&&!cart.length&&!sel){ reloaded=true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
