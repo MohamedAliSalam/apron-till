@@ -21,7 +21,8 @@ function cleanMenu(m){
     if(!x||!x.id||!str(x.name).trim()) return;
     var c=str(x.cat).trim()||cat||'', id=str(x.id), name=str(x.name).trim();
     if(/^(extras?|add-?ons?)$/i.test(c)){ out.push({id:id,name:name,price:Math.max(0,cents(x.price))/100,cat:'Extras',milkOnly:!!x.milkOnly,
-      options:(Array.isArray(x.options)?x.options:[]).map(function(o){return str(o).trim();}).filter(Boolean)}); return; }
+      /* each choice may add its own price: a name, or {name, add} */
+      options:(Array.isArray(x.options)?x.options:[]).map(function(o){ return typeof o==='string'?{name:o.trim(),add:0}:{name:str(o&&o.name).trim(),add:Math.max(0,cents(o&&o.add))/100}; }).filter(function(o){return o.name;})}); return; }
     var hot=priceOrNull(x.hot), iced=priceOrNull(x.iced);
     if(hot==null&&iced==null) hot=Math.max(0,cents(x.price))/100;   /* older menus had a single price */
     out.push({id:id,name:name,hot:hot,iced:iced,milk:!!x.milk,
@@ -42,7 +43,7 @@ var DEFAULT_MENU={items:[
   {id:'latte',name:'Latte',hot:4,iced:4,milk:true},{id:'spanish-latte',name:'Spanish',hot:5,iced:5,milk:true},{id:'hot-chocolate',name:'Hot Chocolate',hot:4,milk:true},
   {id:'matcha',name:'Matcha',hot:5,iced:5,milk:true,variants:[{name:'Dirty',add:1},{name:'Strawberry',add:1},{name:'Mango',add:1}]},
   {id:'syrup',name:'Syrup',price:1,cat:'Extras',options:['Vanilla','Caramel','Hazelnut','Pumpkin Spice','Tiramisu','Cinnamon','Toffenut']},
-  {id:'milk',name:'Milk',price:0,cat:'Extras',milkOnly:true,options:['Oat','Lactose free','Almond']},
+  {id:'milk',name:'Milk',price:0,cat:'Extras',milkOnly:true,options:[{name:'Oat',add:1},{name:'Lactose free',add:0},{name:'Almond',add:1}]},
   {id:'espresso-shot',name:'Espresso Shot',price:1,cat:'Extras'},{id:'we-make-it',name:'We make it',price:1,cat:'Extras'}],rate:89000};
 function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)||DEFAULT_MENU); orders=localOrders(); }
 function saveOrders(){ var ok=writeJSON(K_ORD,orders); if(!ok) warn('This device could not save the order. Its storage may be full or blocked. Export your orders, then free up space.'); return ok; }
@@ -96,11 +97,13 @@ function variantOf(it,name){ return name?(it.variants||[]).filter(function(v){re
 /* "Iced Dirty Matcha": hot or iced only when the drink is sold both ways, then the kind, then the drink */
 function drinkName(it,temp,variant){ return (temps(it).length>1?(temp==='iced'?'Iced ':'Hot '):'')+(variant?variant.name+' ':'')+it.name; }
 function extraName(e,opt){ return e.name+(opt?': '+opt:''); }
+/* what a chosen option adds on top of the add-on's own price, such as +1 for oat milk */
+function optAdd(e,opt){ var o=opt?(e.options||[]).filter(function(x){return x.name===opt;})[0]:null; return o?o.add:0; }
 function lineKey(id,temp,variant,extras){ return id+'|'+temp+'|'+(variant||'')+'|'+extras.map(function(e){return e.id+':'+(e.opt||'');}).sort().join(','); }
 function cartLines(){
   return cart.map(function(c){ var it=item(c.id); if(!it||isExtra(it)||it[c.temp]==null) return null;
     var v=variantOf(it,c.variant); if(c.variant&&!v) return null;
-    var ex=(c.extras||[]).map(function(e){ var x=item(e.id); return isExtra(x)?{name:extraName(x,e.opt),price:x.price}:null; }).filter(Boolean);
+    var ex=(c.extras||[]).map(function(e){ var x=item(e.id); return isExtra(x)?{name:extraName(x,e.opt),price:(cents(x.price)+cents(optAdd(x,e.opt)))/100}:null; }).filter(Boolean);
     var base=cents(it[c.temp])+(v?cents(v.add):0);
     var unit=base+ex.reduce(function(a,e){return a+cents(e.price);},0);
     return {key:c.key,id:it.id,temp:c.temp,variant:c.variant||'',name:drinkName(it,c.temp,v),base:base/100,extras:ex,price:unit/100,qty:c.qty};
@@ -159,7 +162,7 @@ function renderMenu(){
   exs.forEach(function(it){
     var on=selExtras[it.id], b=el('button','choice tile'); b.type='button'; b.disabled=!chosen; b.setAttribute('aria-pressed',String(!!on));
     if(it.options.length) b.setAttribute('aria-expanded',String(openExtra===it.id));
-    var picked1=it.options.length&&on&&on!==true?on:'', cost=cents(it.price)?'+'+money(cents(it.price)):'';
+    var picked1=it.options.length&&on&&on!==true?on:'', costC=cents(it.price)+(picked1?cents(optAdd(it,picked1)):0), cost=costC?'+'+money(costC):'';
     b.appendChild(el('b',null,it.name+(it.options.length?' ▾':'')));
     b.appendChild(el('span',null,picked1?picked1+(cost?'  ·  '+cost:''):cost||(it.options.length?'Normal':'Free')));
     b.addEventListener('click',tap(function(){
@@ -173,15 +176,15 @@ function renderMenu(){
   var open=openExtra?item(openExtra):null, cbox=$('choices'); cbox.textContent=''; cbox.hidden=!open;
   if(open){
     cbox.appendChild(el('span','label',open.name+':'));
-    open.options.concat(selExtras[open.id]?[cents(open.price)?'No '+open.name.toLowerCase():'Normal '+open.name.toLowerCase()]:[]).forEach(function(o,i){
-      var none=i>=open.options.length, c=el('button','chip'+(none?' none':''),o); c.type='button'; c.setAttribute('aria-pressed',String(!none&&selExtras[open.id]===o));
-      c.addEventListener('click',tap(function(){ if(none) delete selExtras[open.id]; else selExtras[open.id]=o; openExtra=null; }));
+    open.options.concat(selExtras[open.id]?[{name:cents(open.price)?'No '+open.name.toLowerCase():'Normal '+open.name.toLowerCase(),none:true}]:[]).forEach(function(o){
+      var none=!!o.none, c=el('button','chip'+(none?' none':''),o.name+(!none&&o.add?'  +'+money(cents(o.add)):'')); c.type='button'; c.setAttribute('aria-pressed',String(!none&&selExtras[open.id]===o.name));
+      c.addEventListener('click',tap(function(){ if(none) delete selExtras[open.id]; else selExtras[open.id]=o.name; openExtra=null; }));
       cbox.appendChild(c);
     });
   }
   var picked=chosen?pickedExtras():[], v=chosen?variantOf(chosen,selVar):null;
   var ready=!!chosen&&!!selTemp;
-  var selTotal=ready?cents(chosen[selTemp])+(v?cents(v.add):0)+picked.reduce(function(a,e){return a+cents(e.item.price);},0):0;
+  var selTotal=ready?cents(chosen[selTemp])+(v?cents(v.add):0)+picked.reduce(function(a,e){return a+cents(e.item.price)+cents(optAdd(e.item,e.opt));},0):0;
   $('sel-name').textContent=!chosen?'Nothing selected':(selTemp?drinkName(chosen,selTemp,v):(v?v.name+' ':'')+chosen.name)+(picked.length?' + '+picked.map(function(e){return extraName(e.item,e.opt);}).join(' + '):'');
   $('sel-price').textContent=!chosen?'':!selTemp?'Choose hot or iced':money(selTotal);
   $('add-sel').disabled=!ready;
@@ -357,13 +360,13 @@ $('e-rate').addEventListener('input',function(){ dirty=true; });
 $('save-menu').addEventListener('click',function(){
   var named=edit.items.filter(function(x){return str(x.name).trim();});
   var items=named.filter(function(x){return !isExtra(x);}).map(function(x){ return {id:x.id,name:str(x.name).trim(),hot:priceOrNull(x.hot),iced:priceOrNull(x.iced),milk:!!x.milk,variants:parseKinds(x.kindsText)}; })
-    .concat(named.filter(isExtra).map(function(x){ return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:'Extras',milkOnly:!!x.milkOnly,options:parseChoices(x.choicesText)}; }));
+    .concat(named.filter(isExtra).map(function(x){ return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:'Extras',milkOnly:!!x.milkOnly,options:parseKinds(x.choicesText)}; }));
   var rate=parseInt(String($('e-rate').value).replace(/[^\d]/g,''),10)||cfg.rate;
   var body={items:items,rate:rate};
   if(writeJSON(K_CFG,body)){ if(cloud.on) shop().collection('config').doc('menu').set(body).catch(syncErr); cfg=cleanMenu(body); dirty=false; loadEditor(); renderAll(); $('save-msg').textContent='Saved. The cashier tab is updated.'; }
   else $('save-msg').textContent='Not saved. This device’s storage is full or blocked.';
 });
-function loadEditor(){ edit={items:cfg.items.map(function(t){ return isExtra(t)?{id:t.id,name:t.name,price:t.price,cat:'Extras',milkOnly:!!t.milkOnly,choicesText:listText(t.options)}:{id:t.id,name:t.name,hot:t.hot,iced:t.iced,milk:!!t.milk,kindsText:listText(t.variants,true)}; })}; $('e-rate').value=cfg.rate; renderEditor(); }
+function loadEditor(){ edit={items:cfg.items.map(function(t){ return isExtra(t)?{id:t.id,name:t.name,price:t.price,cat:'Extras',milkOnly:!!t.milkOnly,choicesText:listText(t.options,true)}:{id:t.id,name:t.name,hot:t.hot,iced:t.iced,milk:!!t.milk,kindsText:listText(t.variants,true)}; })}; $('e-rate').value=cfg.rate; renderEditor(); }
 
 /* ---------- export, backup, reset ---------- */
 /* On a phone or tablet that can share files, open the share sheet (Save to Files, WhatsApp, email).
