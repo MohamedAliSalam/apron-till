@@ -160,7 +160,8 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .qty button{width:38px;height:38px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font-size:1.3rem;cursor:pointer;line-height:1}
 .qty b{min-width:1.6em;text-align:center}
 .choice{position:relative}
-.choice .badge{position:absolute;top:8px;right:8px;background:var(--orange);color:var(--on-orange);border-radius:999px;min-width:1.7em;text-align:center;font-weight:700;padding:1px 6px}
+#drinks .choice.tile{padding-right:34px}
+.choice .badge{position:absolute;top:6px;right:6px;background:var(--orange);color:var(--on-orange);border-radius:999px;min-width:1.7em;text-align:center;font-weight:700;padding:1px 6px}
 .selbox{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--soft);border-radius:12px;padding:14px}
 .selinfo{display:flex;flex-direction:column;gap:2px;min-width:0}
 .selinfo b{font-family:var(--display);font-size:1.7rem;text-transform:uppercase;letter-spacing:.03em;line-height:1.05;overflow-wrap:anywhere}
@@ -180,8 +181,8 @@ a.btn{text-decoration:none;display:inline-block}
 .dgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start;overflow:auto;min-height:0}
 .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .xgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-content:start;overflow:auto;min-height:0}
-.choice.tile{min-height:100px;padding:12px 14px;justify-content:center}
-.choice.tile b{font-size:1.5rem;overflow-wrap:anywhere}
+.choice.tile{min-height:92px;padding:10px 12px;justify-content:center;min-width:0}
+.choice.tile b{font-size:1.3rem;overflow-wrap:break-word;word-break:normal;hyphens:none;min-width:0;max-width:100%}
 .choice.tile span{font-size:.95rem}
 .choice.tile span{font-size:.85rem}
 .choice.temp{min-height:96px;align-items:center;text-align:center;justify-content:center}
@@ -189,20 +190,48 @@ a.btn{text-decoration:none;display:inline-block}
 .till3 .selbox{margin-top:auto;padding:14px;flex-wrap:nowrap}
 .till3 .selbox .big{flex:none;font-size:1.5rem;padding:16px 28px}
 .rowhead{display:flex;justify-content:space-between;align-items:center}
-.cartwrap{flex:1;min-height:70px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.cartwrap{flex:1;min-height:56px;overflow:auto;display:flex;flex-direction:column;gap:8px}
 .cartwrap .flash{padding:8px 10px;font-size:.95rem}
 .fields3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 .fields3 input{padding:9px 10px;min-width:0}
-.payrow{display:flex;gap:12px;align-items:center}
-.payrow .qr{width:118px;margin:0;padding:6px;border-radius:8px;flex:none}
+.sumrow{display:flex;align-items:center;gap:10px;border-top:2px solid var(--fg);padding-top:8px;font-variant-numeric:tabular-nums}
+.totalbox{margin-left:auto;display:flex;align-items:baseline;gap:10px}
+.totalbox b{font-family:var(--display);font-size:2.2rem;line-height:1}
+.payrow{display:flex;gap:10px;align-items:stretch}
+.payrow .qr{width:100px;height:100px;margin:0;padding:5px;border-radius:8px;flex:none}
+.payrow .big{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 12px;font-size:1.15rem;min-width:0}
+.payrow .big b{font-size:2rem;line-height:1;font-variant-numeric:tabular-nums}
 .payinfo{display:flex;flex-direction:column;gap:2px;min-width:0}
 .payinfo b{font-family:var(--display);font-size:2.6rem;line-height:1;font-variant-numeric:tabular-nums}
 .till3 .total{padding-top:6px}
 .till3 .total b{font-size:2.2rem}
-.till3 .hint.ll{margin-top:-8px;font-size:.85rem}
+.till3 .hint.ll{margin-top:-6px;font-size:.8rem}
 main[data-v="cashier"]{padding-block:10px}
 @media (min-width:900px) and (min-height:520px){
   .till3{height:calc(100dvh - var(--barh,58px) - 20px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+}
+/* a short screen, such as the tablet's browser with its tabs and address bar showing */
+@media (min-width:900px) and (max-height:700px){
+  .bar .barin{padding-block:4px}
+  nav a{padding:6px 14px}
+  .till3 .col{padding:10px;gap:7px}
+  .step{gap:7px}
+  .choice.tile{min-height:68px;padding:7px 10px}
+  .choice.tile b{font-size:1.15rem}
+  .choice.tile span{font-size:.85rem}
+  .choice.temp{min-height:64px}
+  .choice.temp b{font-size:1.6rem}
+  .drinktitle{font-size:1.6rem}
+  #back{padding:7px 12px}
+  .till3 .selbox{padding:9px 12px}
+  .till3 .selbox .big{padding:11px 22px;font-size:1.3rem}
+  .selinfo b{font-size:1.35rem}
+  .cart li{padding:5px 0}
+  .qty button{width:34px;height:34px}
+  .totalbox b{font-size:1.9rem}
+  .fields3 input{padding:7px 9px}
+  .payrow .qr{width:88px;height:88px}
+  .payrow .big b{font-size:1.7rem}
 }
 @media (max-width:899px){ .till3{grid-template-columns:1fr} .dgrid,.xgrid{grid-template-columns:repeat(2,1fr)} .till3 .selbox{flex-wrap:wrap} }
 .row.item{grid-template-columns:1fr 92px 92px 40px}
@@ -250,8 +279,10 @@ main[data-v="cashier"]{padding-block:10px}
         <p class="flash" id="flash" hidden></p>
         <ul class="cart" id="cart"><li class="none">Nothing added yet.</li></ul>
       </div>
-      <div class="discrow"><button class="btn" type="button" id="disc" aria-pressed="false" disabled>10% off</button><span id="disc-amt"></span></div>
-      <div class="total"><span class="label">Total</span><b id="total">$0</b></div>
+      <div class="sumrow">
+        <button class="btn" type="button" id="disc" aria-pressed="false" disabled>10% off</button><span id="disc-amt"></span>
+        <div class="totalbox"><span class="label">Total</span><b id="total">$0</b></div>
+      </div>
       <p class="hint ll" id="total-ll"></p>
       <div class="fields3">
         <input id="c-name" autocomplete="off" placeholder="Name" aria-label="Customer name">
@@ -260,9 +291,8 @@ main[data-v="cashier"]{padding-block:10px}
       </div>
       <div class="payrow">
         <img id="pay-qr" class="qr" src="monty-qr.png" alt="MyMonty QR code" hidden>
-        <div class="payinfo"><span class="label">Customer pays with MyMonty</span><b id="pay-total">$0</b></div>
+        <button class="big" type="button" id="place" disabled><span>MyMonty paid, send order</span><b id="pay-total">$0</b></button>
       </div>
-      <button class="big" type="button" id="place" disabled>Paid, send order</button>
     </div>
   </section>
 
