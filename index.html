@@ -364,6 +364,7 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
         <input type="password" id="lock-pass" autocomplete="off" placeholder="Password" aria-label="Password">
         <input type="password" id="lock-pass2" autocomplete="off" placeholder="Repeat password" aria-label="Repeat password" hidden>
         <button class="btn primary" type="submit" id="lock-go">Unlock</button>
+        <button class="btn" type="button" id="bio-go" hidden>Unlock with fingerprint</button>
       </form>
       <p class="label" id="lock-msg"></p>
     </div>
@@ -417,7 +418,8 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
     </div>
     <div class="panel span2">
       <h2>Admin password</h2>
-      <div class="acts"><button class="btn" type="button" id="lock-now">Lock Admin now</button><button class="btn" type="button" id="lock-change">Change password</button></div>
+      <div class="acts"><button class="btn" type="button" id="lock-now">Lock Admin now</button><button class="btn" type="button" id="lock-change">Change password</button><button class="btn" type="button" id="bio-set" hidden>Turn on fingerprint unlock</button></div>
+      <p class="label" id="bio-msg"></p>
     </div>
     <div class="panel span2">
       <h2>Backup and reset</h2>
@@ -449,7 +451,7 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
 </dialog>
 
 <script src="xlsx.full.min.js"></script>
-<script src="firebase-config.js?v=26"></script>
-<script src="app.js?v=26"></script>
+<script src="firebase-config.js?v=27"></script>
+<script src="app.js?v=27"></script>
 </body>
 </html>

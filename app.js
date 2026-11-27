@@ -452,6 +452,7 @@ function renderLock(){
   $('lock-title').textContent=changing?'Change the admin password':setting?'Set an admin password':'Admin is locked';
   $('lock-hint').textContent=setting?'Choose a password of at least 4 characters and write it down. It protects prices, the customer list, exports and resets on this device.':'Enter the admin password to see sales, customers and the menu.';
   $('lock-pass2').hidden=!setting; $('lock-go').textContent=setting?'Save password':'Unlock';
+  if(typeof renderBio==='function') renderBio();
 }
 function lockAdmin(){ if(!unlocked&&!changing) return; unlocked=false; changing=false; $('lock-pass').value=''; $('lock-pass2').value=''; $('lock-msg').textContent=''; renderLock(); }
 $('lock-form').addEventListener('submit',async function(e){
@@ -471,8 +472,50 @@ $('lock-form').addEventListener('submit',async function(e){
   $('lock-pass').value=''; $('lock-pass2').value=''; msg.textContent=''; renderLock();
   if(cloud.on) refreshHistory().then(renderToday);
 });
+/* Fingerprint, face or the device's own screen lock, through the browser's passkey support.
+   It is set up per device, after unlocking with the password once. The password always still works. */
+var K_BIO='apron.till.bio';
+function b64(buf){ return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))); }
+function unb64(t){ var bin=atob(t), a=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a; }
+function rnd(n){ return crypto.getRandomValues(new Uint8Array(n)); }
+var bioReady=false;
+function bioRec(){ var r=readJSON(K_BIO); return r&&r.id?r:null; }
+function renderBio(){
+  $('bio-go').hidden=!(bioReady&&bioRec())||changing;
+  $('bio-set').hidden=!bioReady;
+  $('bio-set').textContent=bioRec()?'Turn off fingerprint unlock':'Turn on fingerprint unlock';
+}
+(async function(){
+  try{ bioReady=!!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials)&&await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }catch(e){ bioReady=false; }
+  renderBio();
+})();
+$('bio-set').addEventListener('click',async function(){
+  var msg=$('bio-msg');
+  if(bioRec()){ localStorage.removeItem(K_BIO); msg.textContent='Fingerprint unlock is off on this device.'; renderBio(); return; }
+  try{
+    var cred=await navigator.credentials.create({publicKey:{challenge:rnd(32),rp:{name:'Apron Till'},
+      user:{id:rnd(16),name:'apron-admin',displayName:'Apron admin'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'discouraged'},
+      timeout:60000,attestation:'none'}});
+    if(!cred) throw 0;
+    writeJSON(K_BIO,{id:b64(cred.rawId)}); msg.textContent='Fingerprint unlock is on for this device. The password still works too.';
+  }catch(e){ msg.textContent='Fingerprint unlock was not set up. Make sure this device has a fingerprint or screen lock, then try again.'; }
+  renderBio();
+});
+$('bio-go').addEventListener('click',async function(){
+  var rec=bioRec(), msg=$('lock-msg'); if(!rec) return;
+  try{
+    var got=await navigator.credentials.get({publicKey:{challenge:rnd(32),allowCredentials:[{type:'public-key',id:unb64(rec.id),transports:['internal']}],userVerification:'required',timeout:60000}});
+    /* byte 32 of the authenticator data holds the flags; 0x04 means the person was verified */
+    var flags=got&&got.response&&got.response.authenticatorData?new Uint8Array(got.response.authenticatorData)[32]:0;
+    if(!(flags&4)) throw 0;
+    unlocked=true; changing=false; $('lock-pass').value=''; msg.textContent=''; renderLock(); renderBio();
+    if(cloud.on) refreshHistory().then(renderToday);
+  }catch(e){ msg.textContent='Not recognised. Try again, or use the password.'; }
+});
 $('lock-now').addEventListener('click',lockAdmin);
-$('lock-change').addEventListener('click',function(){ changing=true; renderLock(); $('lock-pass').focus(); });
+$('lock-change').addEventListener('click',function(){ changing=true; renderLock(); renderBio(); $('lock-pass').focus(); });
 renderLock();
 
 /* ---------- devices signed in to sync ---------- */
