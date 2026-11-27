@@ -166,6 +166,8 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .selinfo b{font-family:var(--display);font-size:1.7rem;text-transform:uppercase;letter-spacing:.03em;line-height:1.05;overflow-wrap:anywhere}
 .selinfo span:last-child{color:var(--muted);font-variant-numeric:tabular-nums}
 .selbox .big{font-size:1.25rem;padding:13px 20px}
+.lines2 li.ex{font-family:var(--body);font-weight:600;text-transform:none;font-size:1rem;letter-spacing:0;color:var(--muted);margin-bottom:6px}
+.choice:disabled{opacity:.45;cursor:not-allowed}
 .catgroup{display:flex;flex-direction:column;gap:8px}
 #menu{display:flex;flex-direction:column;gap:18px}
 .lines2{list-style:none;margin:0;padding:0;font-family:var(--display);font-weight:700;text-transform:uppercase;font-size:1.5rem;letter-spacing:.03em;line-height:1.15}
@@ -244,14 +246,19 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <p class="label" id="t-split"></p>
     </div>
     <div class="panel span2">
-      <h2>Menu</h2>
-      <p class="hint">Each row is one thing the cashier can tap: its name, the group it sits under, and its price in dollars.</p>
+      <h2>Drinks</h2>
+      <p class="hint">One row per drink: its name, the group it sits under on the cashier screen, and its price in dollars.</p>
       <div class="rows" id="e-items"></div>
       <datalist id="cats"></datalist>
-      <div class="fields">
+      <div class="acts"><button class="btn" type="button" id="add-item">Add a drink</button></div>
+      <h2 style="margin-top:12px">Extras</h2>
+      <p class="hint">Add-ons for a drink, such as an extra shot. The cashier picks one drink, then any number of extras for it.</p>
+      <div class="rows" id="e-extras"></div>
+      <div class="acts"><button class="btn" type="button" id="add-extra">Add an extra</button></div>
+      <div class="fields" style="margin-top:12px">
         <label>Lebanese pounds for $1<input id="e-rate" inputmode="numeric" autocomplete="off"></label>
       </div>
-      <div class="acts"><button class="btn" type="button" id="add-item">Add a drink</button><button class="btn primary" type="button" id="save-menu">Save menu</button><span id="save-msg" class="label"></span></div>
+      <div class="acts"><button class="btn primary" type="button" id="save-menu">Save menu</button><span id="save-msg" class="label"></span></div>
     </div>
     <div class="panel span2">
       <div class="wall-head" style="margin:0"><h2>Customers</h2><div class="acts"><span class="label" id="export-msg"></span><button class="btn primary" type="button" id="export">Export all orders to Excel</button><button class="btn" type="button" id="copy-cust">Copy list</button></div></div>
