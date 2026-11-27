@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.mohamedalisalam.aprontill",
+      "sha256_cert_fingerprints": ["8E:6D:9A:73:1E:B0:6F:EE:8B:58:E4:CD:37:CB:D8:D5:F3:FD:88:6C:40:86:5E:6F:A0:5A:AC:AD:69:A7:33:1B"]
+    }
+  }
+]
