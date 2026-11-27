@@ -197,6 +197,16 @@ a.btn{text-decoration:none;display:inline-block}
 .sumrow{display:flex;align-items:center;gap:10px;border-top:2px solid var(--fg);padding-top:8px;font-variant-numeric:tabular-nums}
 .totalbox{margin-left:auto;display:flex;align-items:baseline;gap:10px}
 .totalbox b{font-family:var(--display);font-size:2.2rem;line-height:1}
+.paybtn{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px}
+.paybtn b{font-size:2rem;line-height:1;font-variant-numeric:tabular-nums}
+dialog#paydlg{border:0;border-radius:18px;padding:22px 26px;background:var(--surface);color:var(--fg);max-width:min(92vw,560px);max-height:96dvh}
+dialog#paydlg::backdrop{background:rgba(8,12,18,.72)}
+.paybox{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.payamt{font-family:var(--display);font-size:3.4rem;line-height:1;font-variant-numeric:tabular-nums}
+.qr.bigqr{width:min(52dvh,420px);height:auto;padding:12px;margin:0}
+.payacts{display:flex;gap:10px;align-self:stretch;margin-top:6px}
+.payacts .btn{padding:14px 22px;font-size:1.05rem}
+.payacts .big{flex:1}
 .payrow{display:flex;gap:10px;align-items:stretch}
 .payrow .qr{width:100px;height:100px;margin:0;padding:5px;border-radius:8px;flex:none}
 .payrow .big{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 12px;font-size:1.15rem;min-width:0}
@@ -223,6 +233,9 @@ main[data-v="cashier"]{padding-block:10px}
   .choice.temp b{font-size:1.6rem}
   .drinktitle{font-size:1.6rem}
   #back{padding:7px 12px}
+  #step-drink .choice.tile{min-height:54px;padding:6px 10px}
+  .chip{padding:7px 12px;white-space:nowrap}
+  #v-cashier #step-drink .chips{flex-wrap:nowrap;overflow-x:auto}
   .till3 .selbox{padding:9px 12px}
   .till3 .selbox .big{padding:11px 22px;font-size:1.3rem}
   .selinfo b{font-size:1.35rem}
@@ -234,7 +247,15 @@ main[data-v="cashier"]{padding-block:10px}
   .payrow .big b{font-size:1.7rem}
 }
 @media (max-width:899px){ .till3{grid-template-columns:1fr} .dgrid,.xgrid{grid-template-columns:repeat(2,1fr)} .till3 .selbox{flex-wrap:wrap} }
-.row.item{grid-template-columns:1fr 92px 92px 40px}
+.row.item{grid-template-columns:1fr 84px 84px 1.3fr 40px}
+.row.extra{grid-template-columns:1fr 84px 1.6fr 40px}
+.xgrid.kinds{grid-template-columns:repeat(4,1fr)}
+#step-drink .xgrid,#step-drink .tgrid,#step-drink .chips{flex:none;overflow:visible}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{font:inherit;font-weight:600;padding:9px 14px;border-radius:999px;border:2px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--sel);border-color:var(--sel);color:var(--on-sel)}
+.chip.none{color:var(--bad)}
+@media (max-width:700px){ .row.item,.row.extra{grid-template-columns:1fr 84px 84px 40px} .row.item input.wide:last-of-type,.row.extra input.wide:last-of-type{grid-column:1/-1;order:9} .row.extra{grid-template-columns:1fr 84px 40px} }
 .catgroup{display:flex;flex-direction:column;gap:8px}
 #menu{display:flex;flex-direction:column;gap:18px}
 .lines2{list-style:none;margin:0;padding:0;font-family:var(--display);font-weight:700;text-transform:uppercase;font-size:1.5rem;letter-spacing:.03em;line-height:1.15}
@@ -265,8 +286,11 @@ main[data-v="cashier"]{padding-block:10px}
         <div class="rowhead"><button class="btn" type="button" id="back">← Menu</button><b class="drinktitle" id="drink-title"></b></div>
         <span class="label">Hot or iced</span>
         <div class="tgrid" id="temps"></div>
+        <span class="label" id="kinds-label" hidden>Kind</span>
+        <div class="xgrid kinds" id="kinds" hidden></div>
         <span class="label">Add-ons</span>
         <div class="xgrid" id="extras"></div>
+        <div class="chips" id="choices" hidden></div>
         <div class="selbox">
           <div class="selinfo"><b id="sel-name">Nothing selected</b><span id="sel-price"></span></div>
           <button class="big" type="button" id="add-sel" disabled>Add to order</button>
@@ -289,10 +313,7 @@ main[data-v="cashier"]{padding-block:10px}
         <input id="c-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="Phone" aria-label="Customer phone number">
         <input id="c-note" autocomplete="off" placeholder="Note" aria-label="Note for the barista">
       </div>
-      <div class="payrow">
-        <img id="pay-qr" class="qr" src="monty-qr.png" alt="MyMonty QR code" hidden>
-        <button class="big" type="button" id="place" disabled><span>MyMonty paid, send order</span><b id="pay-total">$0</b></button>
-      </div>
+      <button class="big paybtn" type="button" id="pay-open" disabled><span>Take payment</span><b id="pay-amt">$0</b></button>
     </div>
   </section>
 
@@ -325,11 +346,11 @@ main[data-v="cashier"]{padding-block:10px}
     </div>
     <div class="panel span2">
       <h2>Drinks</h2>
-      <p class="hint">One row per drink: its name, its hot price and its iced price in dollars. Leave a price empty if you do not sell the drink that way. With both filled, the cashier chooses hot or iced.</p>
+      <p class="hint">One row per drink: its name, its hot price and its iced price in dollars. Leave a price empty if you do not sell the drink that way. In the last box you can list kinds of the drink with what each adds to the price, such as <b>Dirty +1, Mango +1</b>.</p>
       <div class="rows" id="e-items"></div>
       <div class="acts"><button class="btn" type="button" id="add-item">Add a drink</button></div>
       <h2 style="margin-top:12px">Extras</h2>
-      <p class="hint">Add-ons for a drink, such as an extra shot. The cashier picks one drink, then any number of extras for it.</p>
+      <p class="hint">Add-ons for a drink, such as an extra shot. In the last box you can list choices, such as the syrup flavours: <b>Vanilla, Caramel</b>. The cashier then picks one from a list.</p>
       <div class="rows" id="e-extras"></div>
       <div class="acts"><button class="btn" type="button" id="add-extra">Add an extra</button></div>
       <div class="fields" style="margin-top:12px">
@@ -349,6 +370,11 @@ main[data-v="cashier"]{padding-block:10px}
         <input type="password" id="sync-pass" autocomplete="current-password" placeholder="Shop password" aria-label="Shop password">
         <button class="btn primary" type="submit" id="sync-go">Turn on sync</button>
       </form>
+      <div id="dev-box" hidden>
+        <span class="label" id="dev-count"></span>
+        <ul class="donelist" id="dev-list"></ul>
+        <div class="acts"><button class="btn danger" type="button" id="dev-kick">Sign out all other devices</button></div>
+      </div>
       <div class="acts"><button class="btn" type="button" id="sync-off" hidden>Turn off sync on this device</button></div>
       <p class="label" id="sync-msg"></p>
     </div>
@@ -375,6 +401,20 @@ main[data-v="cashier"]{padding-block:10px}
     </div>
   </section>
 </main>
+
+<!-- payment: a large QR for the customer to scan, shown when the cashier taps Take payment -->
+<dialog id="paydlg" aria-labelledby="pay-title">
+  <div class="paybox">
+    <span class="label" id="pay-title">Customer scans with MyMonty and pays</span>
+    <b class="payamt" id="pay-total">$0</b>
+    <img id="pay-qr" class="qr bigqr" src="monty-qr.png" alt="MyMonty QR code" hidden>
+    <p class="hint" id="pay-ll"></p>
+    <div class="payacts">
+      <button class="btn" type="button" id="pay-back">Back</button>
+      <button class="big" type="button" id="place">Paid, send order</button>
+    </div>
+  </div>
+</dialog>
 
 <script src="xlsx.full.min.js"></script>
 <script src="firebase-config.js"></script>

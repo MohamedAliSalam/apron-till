@@ -1,5 +1,5 @@
 // Keeps the app working without internet. Bump the version to push an update.
-const CACHE = 'apron-till-v18';
+const CACHE = 'apron-till-v19';
 const FILES = ['./', 'index.html', 'app.js', 'firebase-config.js', 'xlsx.full.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'monty-qr.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
