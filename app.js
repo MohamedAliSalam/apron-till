@@ -20,11 +20,11 @@ function cleanMenu(m){
   var push=function(x,cat){
     if(!x||!x.id||!str(x.name).trim()) return;
     var c=str(x.cat).trim()||cat||'', id=str(x.id), name=str(x.name).trim();
-    if(/^(extras?|add-?ons?)$/i.test(c)){ out.push({id:id,name:name,price:Math.max(0,cents(x.price))/100,cat:'Extras',
+    if(/^(extras?|add-?ons?)$/i.test(c)){ out.push({id:id,name:name,price:Math.max(0,cents(x.price))/100,cat:'Extras',milkOnly:!!x.milkOnly,
       options:(Array.isArray(x.options)?x.options:[]).map(function(o){return str(o).trim();}).filter(Boolean)}); return; }
     var hot=priceOrNull(x.hot), iced=priceOrNull(x.iced);
     if(hot==null&&iced==null) hot=Math.max(0,cents(x.price))/100;   /* older menus had a single price */
-    out.push({id:id,name:name,hot:hot,iced:iced,
+    out.push({id:id,name:name,hot:hot,iced:iced,milk:!!x.milk,
       variants:(Array.isArray(x.variants)?x.variants:[]).map(function(v){ return {name:str(v&&v.name).trim(),add:Math.max(0,cents(v&&v.add))/100}; }).filter(function(v){return v.name;})});
   };
   (Array.isArray(m&&m.items)?m.items:[]).forEach(function(x){ push(x); });
@@ -38,10 +38,11 @@ var cloud={ready:false,on:false,user:null,db:null,unsub:[],pending:false}, pastO
 function localOrders(){ var o=readJSON(K_ORD); return (Array.isArray(o)?o:[]).filter(function(x){return x&&x.id;}); }
 /* shown on a device that has no saved menu yet and is not signed in to sync */
 var DEFAULT_MENU={items:[
-  {id:'espresso',name:'Espresso',hot:2},{id:'americano',name:'Americano',hot:2.5,iced:3},{id:'flat-white',name:'Flat White',hot:3},
-  {id:'latte',name:'Latte',hot:4,iced:4},{id:'spanish-latte',name:'Spanish',hot:5,iced:5},{id:'hot-chocolate',name:'Hot Chocolate',hot:4},
-  {id:'matcha',name:'Matcha',hot:5,iced:5,variants:[{name:'Dirty',add:1},{name:'Strawberry',add:1},{name:'Mango',add:1}]},
+  {id:'espresso',name:'Espresso',hot:2},{id:'americano',name:'Americano',hot:2.5,iced:3},{id:'flat-white',name:'Flat White',hot:3,milk:true},
+  {id:'latte',name:'Latte',hot:4,iced:4,milk:true},{id:'spanish-latte',name:'Spanish',hot:5,iced:5,milk:true},{id:'hot-chocolate',name:'Hot Chocolate',hot:4,milk:true},
+  {id:'matcha',name:'Matcha',hot:5,iced:5,milk:true,variants:[{name:'Dirty',add:1},{name:'Strawberry',add:1},{name:'Mango',add:1}]},
   {id:'syrup',name:'Syrup',price:1,cat:'Extras',options:['Vanilla','Caramel','Hazelnut','Pumpkin Spice','Tiramisu','Cinnamon','Toffenut']},
+  {id:'milk',name:'Milk',price:0,cat:'Extras',milkOnly:true,options:['Oat','Lactose free','Almond']},
   {id:'espresso-shot',name:'Espresso Shot',price:1,cat:'Extras'},{id:'we-make-it',name:'We make it',price:1,cat:'Extras'}],rate:89000};
 function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)||DEFAULT_MENU); orders=localOrders(); }
 function saveOrders(){ var ok=writeJSON(K_ORD,orders); if(!ok) warn('This device could not save the order. Its storage may be full or blocked. Export your orders, then free up space.'); return ok; }
@@ -116,7 +117,7 @@ function bump(key,by,line){
   renderMenu(); renderSummary();
 }
 /* the extras ticked for the drink being built: [{id, opt}] */
-function pickedExtras(){ return cfg.items.filter(function(x){return isExtra(x)&&selExtras[x.id];}).map(function(x){ return {id:x.id,opt:selExtras[x.id]===true?'':selExtras[x.id],item:x}; }); }
+function pickedExtras(){ var d=sel?item(sel):null; return cfg.items.filter(function(x){return isExtra(x)&&selExtras[x.id]&&(!x.milkOnly||(d&&d.milk));}).map(function(x){ return {id:x.id,opt:selExtras[x.id]===true?'':selExtras[x.id],item:x}; }); }
 function tap(fn){ return function(){ fn(); warned=false; renderMenu(); renderSummary(); }; }
 function renderMenu(){
   var chosen=sel?item(sel):null; if(!chosen||isExtra(chosen)){ sel=null; selTemp=null; selVar=null; openExtra=null; chosen=null; }
@@ -153,13 +154,14 @@ function renderMenu(){
     kbox.appendChild(b);
   });
   var xbox=$('extras'); xbox.textContent='';
-  var exs=cfg.items.filter(isExtra);
+  var exs=cfg.items.filter(function(x){ return isExtra(x)&&(!x.milkOnly||(chosen&&chosen.milk)); });
   if(!exs.length) xbox.appendChild(el('p','empty','No add-ons.'));
   exs.forEach(function(it){
     var on=selExtras[it.id], b=el('button','choice tile'); b.type='button'; b.disabled=!chosen; b.setAttribute('aria-pressed',String(!!on));
     if(it.options.length) b.setAttribute('aria-expanded',String(openExtra===it.id));
-    b.appendChild(el('b',null,it.options.length&&on&&on!==true?it.name+': '+on:it.name+(it.options.length?' ▾':'')));
-    b.appendChild(el('span',null,'+'+money(cents(it.price))));
+    var picked1=it.options.length&&on&&on!==true?on:'', cost=cents(it.price)?'+'+money(cents(it.price)):'';
+    b.appendChild(el('b',null,it.name+(it.options.length?' ▾':'')));
+    b.appendChild(el('span',null,picked1?picked1+(cost?'  ·  '+cost:''):cost||(it.options.length?'Normal':'Free')));
     b.addEventListener('click',tap(function(){
       if(!sel) return;
       if(it.options.length) openExtra=openExtra===it.id?null:it.id;      /* open its list of choices */
@@ -171,7 +173,7 @@ function renderMenu(){
   var open=openExtra?item(openExtra):null, cbox=$('choices'); cbox.textContent=''; cbox.hidden=!open;
   if(open){
     cbox.appendChild(el('span','label',open.name+':'));
-    open.options.concat(selExtras[open.id]?['No '+open.name.toLowerCase()]:[]).forEach(function(o,i){
+    open.options.concat(selExtras[open.id]?[cents(open.price)?'No '+open.name.toLowerCase():'Normal '+open.name.toLowerCase()]:[]).forEach(function(o,i){
       var none=i>=open.options.length, c=el('button','chip'+(none?' none':''),o); c.type='button'; c.setAttribute('aria-pressed',String(!none&&selExtras[open.id]===o));
       c.addEventListener('click',tap(function(){ if(none) delete selExtras[open.id]; else selExtras[open.id]=o; openExtra=null; }));
       cbox.appendChild(c);
@@ -333,12 +335,14 @@ function renderEditor(){
       var row=el('div',extras?'row extra':'row item'), del=el('button',null,'×');
       var field=function(key,label,aria,wide){ var f=el('input',wide?'wide':null); f.value=it[key]==null||it[key]===''?'':str(it[key]); f.placeholder=label; if(!wide) f.inputMode='decimal'; f.id='e-'+key+'-'+it.id; f.setAttribute('aria-label',aria);
         f.addEventListener('input',function(){ it[key]=f.value; dirty=true; }); return f; };
+      var tick=function(key,label){ var l=el('label','chk'), c=el('input'); c.type='checkbox'; c.checked=!!it[key]; c.id='e-'+key+'-'+it.id;
+        c.addEventListener('change',function(){ it[key]=c.checked; dirty=true; }); l.appendChild(c); l.appendChild(document.createTextNode(' '+label)); return l; };
       var name=field('name',extras?'Add-on name':'Drink name',extras?'Add-on name':'Drink name',true);
       del.type='button'; del.setAttribute('aria-label','Remove '+str(it.name));
       del.addEventListener('click',function(){ edit.items.splice(edit.items.indexOf(it),1); dirty=true; renderEditor(); });
       row.appendChild(name);
-      if(extras){ row.appendChild(field('price','$','Price in dollars')); row.appendChild(field('choicesText','Choices: Vanilla, Caramel','Choices, separated by commas',true)); }
-      else { row.appendChild(field('hot','Hot $','Hot price in dollars')); row.appendChild(field('iced','Iced $','Iced price in dollars')); row.appendChild(field('kindsText','Kinds: Dirty +1, Mango +1','Kinds with extra price, separated by commas',true)); }
+      if(extras){ row.appendChild(field('price','$','Price in dollars')); row.appendChild(field('choicesText','Choices: Vanilla, Caramel','Choices, separated by commas',true)); row.appendChild(tick('milkOnly','Milk drinks only')); }
+      else { row.appendChild(field('hot','Hot $','Hot price in dollars')); row.appendChild(field('iced','Iced $','Iced price in dollars')); row.appendChild(field('kindsText','Kinds: Dirty +1, Mango +1','Kinds with extra price, separated by commas',true)); row.appendChild(tick('milk','Has milk')); }
       row.appendChild(del); box.appendChild(row);
     });
   });
@@ -352,14 +356,14 @@ $('add-extra').addEventListener('click',function(){ addRow(true); });
 $('e-rate').addEventListener('input',function(){ dirty=true; });
 $('save-menu').addEventListener('click',function(){
   var named=edit.items.filter(function(x){return str(x.name).trim();});
-  var items=named.filter(function(x){return !isExtra(x);}).map(function(x){ return {id:x.id,name:str(x.name).trim(),hot:priceOrNull(x.hot),iced:priceOrNull(x.iced),variants:parseKinds(x.kindsText)}; })
-    .concat(named.filter(isExtra).map(function(x){ return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:'Extras',options:parseChoices(x.choicesText)}; }));
+  var items=named.filter(function(x){return !isExtra(x);}).map(function(x){ return {id:x.id,name:str(x.name).trim(),hot:priceOrNull(x.hot),iced:priceOrNull(x.iced),milk:!!x.milk,variants:parseKinds(x.kindsText)}; })
+    .concat(named.filter(isExtra).map(function(x){ return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:'Extras',milkOnly:!!x.milkOnly,options:parseChoices(x.choicesText)}; }));
   var rate=parseInt(String($('e-rate').value).replace(/[^\d]/g,''),10)||cfg.rate;
   var body={items:items,rate:rate};
   if(writeJSON(K_CFG,body)){ if(cloud.on) shop().collection('config').doc('menu').set(body).catch(syncErr); cfg=cleanMenu(body); dirty=false; loadEditor(); renderAll(); $('save-msg').textContent='Saved. The cashier tab is updated.'; }
   else $('save-msg').textContent='Not saved. This device’s storage is full or blocked.';
 });
-function loadEditor(){ edit={items:cfg.items.map(function(t){ return isExtra(t)?{id:t.id,name:t.name,price:t.price,cat:'Extras',choicesText:listText(t.options)}:{id:t.id,name:t.name,hot:t.hot,iced:t.iced,kindsText:listText(t.variants,true)}; })}; $('e-rate').value=cfg.rate; renderEditor(); }
+function loadEditor(){ edit={items:cfg.items.map(function(t){ return isExtra(t)?{id:t.id,name:t.name,price:t.price,cat:'Extras',milkOnly:!!t.milkOnly,choicesText:listText(t.options)}:{id:t.id,name:t.name,hot:t.hot,iced:t.iced,milk:!!t.milk,kindsText:listText(t.variants,true)}; })}; $('e-rate').value=cfg.rate; renderEditor(); }
 
 /* ---------- export, backup, reset ---------- */
 /* On a phone or tablet that can share files, open the share sheet (Save to Files, WhatsApp, email).

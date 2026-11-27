@@ -259,8 +259,9 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
   .payrow .big b{font-size:1.7rem}
 }
 @media (max-width:899px){ .till3{grid-template-columns:1fr} .dgrid,.xgrid{grid-template-columns:repeat(2,1fr)} .till3 .selbox{flex-wrap:wrap} }
-.row.item{grid-template-columns:1fr 84px 84px 1.3fr 40px}
-.row.extra{grid-template-columns:1fr 84px 1.6fr 40px}
+.row.item{grid-template-columns:1fr 84px 84px 1.3fr auto 40px}
+.row.extra{grid-template-columns:1fr 84px 1.6fr auto 40px}
+.row .chk{white-space:nowrap;font-size:.85rem}
 .xgrid.kinds{grid-template-columns:repeat(4,1fr)}
 #step-drink .xgrid,#step-drink .tgrid,#step-drink .chips{flex:none;overflow:visible}
 .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
@@ -279,6 +280,8 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
 #v-cashier #step-drink .tgrid{flex:1.4 1 0;min-height:50px;max-height:104px;grid-auto-rows:1fr;overflow:visible}
 #v-cashier #step-drink .xgrid{flex:1 1 0;min-height:44px;max-height:92px;grid-auto-rows:1fr;overflow:visible}
 #v-cashier #step-drink .xgrid[hidden]{display:none}
+#v-cashier #step-drink .xgrid{grid-template-columns:repeat(4,1fr)}
+#v-cashier #step-drink .choice.tile b{font-size:1.05rem;line-height:1.05}
 #v-cashier #step-drink .choice{min-height:0;height:100%;padding-block:4px;justify-content:center}
 #v-cashier #step-drink .chips{flex:none;flex-wrap:wrap;overflow:visible}
 #v-cashier #step-drink .selbox{flex:none;margin-top:auto}
@@ -374,11 +377,11 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
     </div>
     <div class="panel span2">
       <h2>Drinks</h2>
-      <p class="hint">One row per drink: its name, its hot price and its iced price in dollars. Leave a price empty if you do not sell the drink that way. In the last box you can list kinds of the drink with what each adds to the price, such as <b>Dirty +1, Mango +1</b>.</p>
+      <p class="hint">One row per drink: its name, its hot price and its iced price in dollars. Leave a price empty if you do not sell the drink that way. In the last box you can list kinds of the drink with what each adds to the price, such as <b>Dirty +1, Mango +1</b>. Tick <b>Has milk</b> for drinks made with milk.</p>
       <div class="rows" id="e-items"></div>
       <div class="acts"><button class="btn" type="button" id="add-item">Add a drink</button></div>
       <h2 style="margin-top:12px">Extras</h2>
-      <p class="hint">Add-ons for a drink, such as an extra shot. In the last box you can list choices, such as the syrup flavours: <b>Vanilla, Caramel</b>. The cashier then picks one from a list.</p>
+      <p class="hint">Add-ons for a drink, such as an extra shot. In the last box you can list choices, such as the syrup flavours: <b>Vanilla, Caramel</b>. The cashier then picks one from a list. Tick <b>Milk drinks only</b> for an add-on, such as the milk type, that should not show on drinks without milk.</p>
       <div class="rows" id="e-extras"></div>
       <div class="acts"><button class="btn" type="button" id="add-extra">Add an extra</button></div>
       <div class="fields" style="margin-top:12px">
@@ -445,7 +448,7 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
 </dialog>
 
 <script src="xlsx.full.min.js"></script>
-<script src="firebase-config.js?v=22"></script>
-<script src="app.js?v=22"></script>
+<script src="firebase-config.js?v=23"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>
