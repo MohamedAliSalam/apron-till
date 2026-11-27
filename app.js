@@ -120,7 +120,7 @@ function pickedExtras(){ return cfg.items.filter(function(x){return isExtra(x)&&
 function tap(fn){ return function(){ fn(); warned=false; renderMenu(); renderSummary(); }; }
 function renderMenu(){
   var chosen=sel?item(sel):null; if(!chosen||isExtra(chosen)){ sel=null; selTemp=null; selVar=null; openExtra=null; chosen=null; }
-  if(chosen&&temps(chosen).indexOf(selTemp)<0) selTemp=temps(chosen).length===1?temps(chosen)[0]:null;
+  if(chosen&&temps(chosen).indexOf(selTemp)<0) selTemp=temps(chosen).indexOf('hot')>=0?'hot':(temps(chosen)[0]||null);
   if(chosen&&selVar&&!variantOf(chosen,selVar)) selVar=null;
   $('step-list').hidden=!!chosen; $('step-drink').hidden=!chosen; $('drink-title').textContent=chosen?chosen.name:'';
   var dbox=$('drinks'); dbox.textContent='';
@@ -132,7 +132,7 @@ function renderMenu(){
     b.appendChild(el('b',null,it.name));
     b.appendChild(el('span',null,(t.length>1&&it.hot!==it.iced?money(cents(it.hot))+' / '+money(cents(it.iced)):money(cents(it[t[0]])))+(it.variants.length?' +':'')));
     if(count) b.appendChild(el('span','badge',count));
-    b.addEventListener('click',tap(function(){ sel=it.id; selTemp=t.length===1?t[0]:null; selVar=null; openExtra=null; selExtras={}; }));
+    b.addEventListener('click',tap(function(){ sel=it.id; selTemp=t.indexOf('hot')>=0?'hot':(t[0]||null); selVar=null;   /* Hot is the starting choice */ openExtra=null; selExtras={}; }));
     dbox.appendChild(b);
   });
   var tbox=$('temps'); tbox.textContent='';
