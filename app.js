@@ -25,7 +25,9 @@ var cfg, orders;
 /* cloud.on means orders and the menu come from the shared database instead of this device */
 var cloud={ready:false,on:false,user:null,db:null,unsub:[],pending:false}, pastOrders=null;
 function localOrders(){ var o=readJSON(K_ORD); return (Array.isArray(o)?o:[]).filter(function(x){return x&&x.id;}); }
-function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)); orders=localOrders(); }
+/* shown on a device that has no saved menu yet and is not signed in to sync */
+var DEFAULT_MENU={items:[{id:'shift',name:'Shift',price:5,cat:'Drinks'},{id:'double',name:'Double Shift',price:6,cat:'Drinks'},{id:'shot',name:'Extra shot',price:1,cat:'Extras'},{id:'flavour',name:'Flavour',price:1,cat:'Extras'}],rate:89000};
+function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)||DEFAULT_MENU); orders=localOrders(); }
 function saveOrders(){ var ok=writeJSON(K_ORD,orders); if(!ok) warn('This device could not save the order. Its storage may be full or blocked. Export your orders, then free up space.'); return ok; }
 function warn(msg){ var s=$('status'); s.textContent=msg; s.hidden=!msg; }
 function shop(){ return cloud.db.collection('shops').doc('main'); }
