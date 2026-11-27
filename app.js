@@ -53,7 +53,8 @@ async function refreshHistory(){
 loadAll();
 if(navigator.storage&&navigator.storage.persist){ try{ navigator.storage.persist(); }catch(e){} }
 
-var cart=[];            /* [{id, qty}] in the order the cashier tapped them */
+var cart=[];            /* [{id, qty}] in the order the cashier added them */
+var sel=null, warned=false;   /* the drink tapped but not yet added; nothing joins the order until Add to order is tapped */
 var edit=null, dirty=false;
 
 /* ---------- tabs ---------- */
@@ -84,10 +85,10 @@ function renderMenu(){
     var grid=el('div','choices');
     cfg.items.filter(function(it){return it.cat===cat;}).forEach(function(it){
       var inCart=cart.filter(function(c){return c.id===it.id;})[0];
-      var b=el('button','choice'); b.type='button'; b.setAttribute('aria-pressed',String(!!inCart));
+      var b=el('button','choice'); b.type='button'; b.setAttribute('aria-pressed',String(sel===it.id));
       b.appendChild(el('b',null,it.name)); b.appendChild(el('span',null,money(cents(it.price))));
       if(inCart) b.appendChild(el('span','badge',inCart.qty));
-      b.addEventListener('click',function(){ bump(it.id,1); });
+      b.addEventListener('click',function(){ sel=it.id; warned=false; renderMenu(); renderSummary(); });
       grid.appendChild(b);
     });
     g.appendChild(grid); box.appendChild(g);
@@ -96,7 +97,11 @@ function renderMenu(){
 function renderSummary(){
   cart=cart.filter(function(c){return item(c.id);});
   var lines=cartLines(), ul=$('cart'); ul.textContent='';
-  if(!lines.length) ul.appendChild(el('li','none','Tap a drink to add it.'));
+  var chosen=sel?item(sel):null; if(!chosen) sel=null;
+  $('sel-name').textContent=chosen?chosen.name:'Nothing selected';
+  $('sel-price').textContent=chosen?money(cents(chosen.price)):'Tap a drink to select it';
+  $('add-sel').disabled=!chosen;
+  if(!lines.length) ul.appendChild(el('li','none','Nothing added yet.'));
   lines.forEach(function(l){
     var li=el('li'), nm=el('span','nm',l.name); nm.appendChild(el('small',null,money(cents(l.price))+' each'));
     var q=el('span','qty'), minus=el('button',null,'−'), plus=el('button',null,'+');
@@ -110,11 +115,14 @@ function renderSummary(){
   $('total-ll').textContent=total?'= '+llFmt(total/100*cfg.rate)+' at '+cfg.rate.toLocaleString('en-US')+' LL per $1':'';
   $('place').disabled=!lines.length;
 }
-function clearOrder(){ cart=[]; ['c-name','c-phone','c-note'].forEach(function(id){$(id).value='';}); renderMenu(); renderSummary(); }
+$('add-sel').addEventListener('click',function(){ if(!sel) return; var id=sel; sel=null; warned=false; bump(id,1); });
+function clearOrder(){ cart=[]; sel=null; warned=false; ['c-name','c-phone','c-note'].forEach(function(id){$(id).value='';}); renderMenu(); renderSummary(); }
 $('clear-cart').addEventListener('click',clearOrder);
 function flash(msg,err){ var f=$('flash'); f.textContent=msg; f.className='flash'+(err?' err':''); f.hidden=false; }
 $('place').addEventListener('click',function(){
   var lines=cartLines(); if(!lines.length) return;
+  var waiting=sel?item(sel):null;
+  if(waiting&&!warned){ warned=true; flash(waiting.name+' is selected but not added. Tap "Add to order" to include it, or tap "Paid, send order" again to send without it.',true); return; }
   var total=orderTotal();
   loadAll();
   var today=dayKey(Date.now());

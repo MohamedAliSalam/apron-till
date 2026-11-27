@@ -161,6 +161,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .qty b{min-width:1.6em;text-align:center}
 .choice{position:relative}
 .choice .badge{position:absolute;top:8px;right:8px;background:var(--orange);color:var(--on-orange);border-radius:999px;min-width:1.7em;text-align:center;font-weight:700;padding:1px 6px}
+.selbox{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--soft);border-radius:12px;padding:14px}
+.selinfo{display:flex;flex-direction:column;gap:2px;min-width:0}
+.selinfo b{font-family:var(--display);font-size:1.7rem;text-transform:uppercase;letter-spacing:.03em;line-height:1.05;overflow-wrap:anywhere}
+.selinfo span:last-child{color:var(--muted);font-variant-numeric:tabular-nums}
+.selbox .big{font-size:1.25rem;padding:13px 20px}
 .catgroup{display:flex;flex-direction:column;gap:8px}
 #menu{display:flex;flex-direction:column;gap:18px}
 .lines2{list-style:none;margin:0;padding:0;font-family:var(--display);font-weight:700;text-transform:uppercase;font-size:1.5rem;letter-spacing:.03em;line-height:1.15}
@@ -187,8 +192,12 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <div id="menu"></div>
     </div>
     <div class="panel">
+      <div class="selbox">
+        <div class="selinfo"><span class="label">Selected</span><b id="sel-name">Nothing selected</b><span id="sel-price">Tap a drink to select it</span></div>
+        <button class="big" type="button" id="add-sel" disabled>Add to order</button>
+      </div>
       <span class="label">This order</span>
-      <ul class="cart" id="cart"><li class="none">Tap a drink to add it.</li></ul>
+      <ul class="cart" id="cart"><li class="none">Nothing added yet.</li></ul>
       <div class="total"><span class="label">Total</span><b id="total">$0</b></div>
       <p class="hint ll" id="total-ll"></p>
       <div class="fields">
