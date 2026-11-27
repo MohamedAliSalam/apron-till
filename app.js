@@ -279,9 +279,22 @@ $('save-menu').addEventListener('click',function(){
 function loadEditor(){ edit={items:cfg.items.map(function(t){return {id:t.id,name:t.name,price:t.price,cat:t.cat};})}; $('e-rate').value=cfg.rate; renderEditor(); }
 
 /* ---------- export, backup, reset ---------- */
+/* On a phone or tablet that can share files, open the share sheet (Save to Files, WhatsApp, email).
+   Everywhere else, download the file the normal way. */
 function saveFile(name,blob){
-  var a=document.createElement('a'), url=URL.createObjectURL(blob); a.href=url; a.download=name; document.body.appendChild(a); a.click();
-  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },2000);
+  var viaLink=function(){
+    var a=document.createElement('a'), url=URL.createObjectURL(blob); a.href=url; a.download=name; document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },4000);
+  };
+  var file=null; try{ file=new File([blob],name,{type:blob.type}); }catch(e){}
+  var handheld=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  try{
+    if(handheld&&file&&navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:name}).catch(function(e){ if(!e||e.name!=='AbortError') viaLink(); });
+      return 'shared';
+    }
+  }catch(e){}
+  viaLink(); return 'downloaded';
 }
 $('export').addEventListener('click',async function(){
   var msg=$('export-msg');
@@ -302,8 +315,8 @@ $('export').addEventListener('click',async function(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(soldRows.length?soldRows:[{'Item':'Nothing sold yet'}]),'Items sold');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(cust.length?cust:[{'Name':'No customers yet'}]),'Customers');
   var buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  saveFile('apron-orders-'+dayKey(Date.now())+'.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  msg.textContent='Exported '+rows.length+' orders.';
+  var how=saveFile('apron-orders-'+dayKey(Date.now())+'.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  msg.textContent=how==='shared'?rows.length+' orders ready. Choose where to save or send the file.':'Exported '+rows.length+' orders. Look in the Downloads folder.';
 });
 $('backup').addEventListener('click',async function(){
   await refreshHistory(); var all=histList();
