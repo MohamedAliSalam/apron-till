@@ -43,7 +43,7 @@ var DEFAULT_MENU={items:[
   {id:'latte',name:'Latte',hot:4,iced:4,milk:true},{id:'spanish-latte',name:'Spanish',hot:5,iced:5,milk:true},{id:'hot-chocolate',name:'Hot Chocolate',hot:4,milk:true},
   {id:'matcha',name:'Matcha',hot:5,iced:5,milk:true,variants:[{name:'Dirty',add:1},{name:'Strawberry',add:1},{name:'Mango',add:1}]},
   {id:'syrup',name:'Syrup',price:1,cat:'Extras',options:['Vanilla','Caramel','Hazelnut','Pumpkin Spice','Tiramisu','Cinnamon','Toffenut']},
-  {id:'milk',name:'Milk',price:0,cat:'Extras',milkOnly:true,options:[{name:'Oat',add:1},{name:'Lactose free',add:0},{name:'Almond',add:1}]},
+  {id:'milk',name:'Milk',price:0,cat:'Extras',milkOnly:true,options:[{name:'Oat',add:1},{name:'Lactose free',add:0},{name:'Skimmed',add:0},{name:'Almond',add:1}]},
   {id:'espresso-shot',name:'Espresso Shot',price:1,cat:'Extras'},{id:'we-make-it',name:'We make it',price:1,cat:'Extras'}],rate:89000};
 function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)||DEFAULT_MENU); orders=localOrders(); }
 function saveOrders(){ var ok=writeJSON(K_ORD,orders); if(!ok) warn('This device could not save the order. Its storage may be full or blocked. Export your orders, then free up space.'); return ok; }
