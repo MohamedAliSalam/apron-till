@@ -44,7 +44,7 @@ var DEFAULT_MENU={items:[
   {id:'mocha',name:'Mocha',hot:5,iced:5,milk:true},{id:'white-mocha',name:'White Mocha',hot:5,iced:5,milk:true},
   {id:'hot-chocolate',name:'Hot Chocolate',hot:4,milk:true},
   {id:'matcha',name:'Matcha',hot:5,iced:5,milk:true,variants:[{name:'Dirty',add:1},{name:'Strawberry',add:1},{name:'Mango',add:1}]},
-  {id:'syrup',name:'Syrup',price:1,cat:'Extras',options:['Vanilla','Caramel','Hazelnut','Pumpkin Spice','Tiramisu','Cinnamon','Toffeenut']},
+  {id:'syrup',name:'Syrup',price:1,cat:'Extras',options:['Vanilla','Caramel','Hazelnut','Pumpkin Spice','Tiramisu','Cinnamon','Toffeenut','Sugar-free Vanilla','Sugar-free Caramel']},
   {id:'milk',name:'Milk',price:0,cat:'Extras',milkOnly:true,options:[{name:'Oat',add:1},{name:'Lactose free',add:0},{name:'Skimmed',add:0},{name:'Almond',add:1}]},
   {id:'espresso-shot',name:'Espresso Shot',price:1,cat:'Extras'},{id:'we-make-it',name:'We make it',price:1,cat:'Extras'}],rate:89000};
 function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)||DEFAULT_MENU); orders=localOrders(); }
@@ -190,6 +190,9 @@ function renderMenu(){
   $('sel-name').textContent=!chosen?'Nothing selected':(selTemp?drinkName(chosen,selTemp,v):(v?v.name+' ':'')+chosen.name)+(picked.length?' + '+picked.map(function(e){return extraName(e.item,e.opt);}).join(' + '):'');
   $('sel-price').textContent=!chosen?'':!selTemp?'Choose hot or iced':money(selTotal);
   $('add-sel').disabled=!ready;
+  /* if the open drink is taller than its panel (a long list of choices), switch to the tight layout */
+  var sd=$('step-drink'), col=sd.parentElement; sd.classList.remove('tight');
+  if(!sd.hidden&&(col.scrollHeight>col.clientHeight+1||[].some.call(sd.querySelectorAll('.choice'),function(b){return b.scrollHeight>b.clientHeight+1;}))) sd.classList.add('tight');
 }
 function renderSummary(){
   var lines=cartLines(), ul=$('cart'); ul.textContent='';

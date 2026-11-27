@@ -286,6 +286,10 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
 #v-cashier #step-drink .choice{min-height:0;height:100%;padding-block:4px;justify-content:center}
 #v-cashier #step-drink .chips{flex:none;flex-wrap:wrap;overflow:visible}
 #v-cashier #step-drink .selbox{flex:none;margin-top:auto}
+/* when an open list would not fit, the small section headings step aside to make room */
+#v-cashier #step-drink.tight>.label{display:none}
+#v-cashier #step-drink.tight{gap:6px}
+#v-cashier #step-drink.tight .chip{padding:4px 10px}
 @media (max-width:899px){ #v-cashier #step-drink .tgrid,#v-cashier #step-drink .xgrid{flex:none;max-height:none} #v-cashier #step-drink .choice{height:auto;min-height:56px} }
 </style>
 </head>
@@ -451,7 +455,7 @@ main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
 </dialog>
 
 <script src="xlsx.full.min.js"></script>
-<script src="firebase-config.js?v=29"></script>
-<script src="app.js?v=29"></script>
+<script src="firebase-config.js?v=30"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>
