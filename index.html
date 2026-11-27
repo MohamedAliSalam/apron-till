@@ -168,6 +168,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .selbox .big{font-size:1.25rem;padding:13px 20px}
 .lines2 li.ex{font-family:var(--body);font-weight:600;text-transform:none;font-size:1rem;letter-spacing:0;color:var(--muted);margin-bottom:6px}
 .choice:disabled{opacity:.45;cursor:not-allowed}
+.discrow{display:flex;align-items:center;justify-content:space-between;gap:12px;font-variant-numeric:tabular-nums}
+.btn[aria-pressed="true"]{background:var(--orange);border-color:var(--orange);color:var(--on-orange)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
 .catgroup{display:flex;flex-direction:column;gap:8px}
 #menu{display:flex;flex-direction:column;gap:18px}
 .lines2{list-style:none;margin:0;padding:0;font-family:var(--display);font-weight:700;text-transform:uppercase;font-size:1.5rem;letter-spacing:.03em;line-height:1.15}
@@ -200,6 +203,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       </div>
       <span class="label">This order</span>
       <ul class="cart" id="cart"><li class="none">Nothing added yet.</li></ul>
+      <div class="discrow"><button class="btn" type="button" id="disc" aria-pressed="false" disabled>10% off</button><span id="disc-amt"></span></div>
       <div class="total"><span class="label">Total</span><b id="total">$0</b></div>
       <p class="hint ll" id="total-ll"></p>
       <div class="fields">

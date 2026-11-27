@@ -80,7 +80,10 @@ function cartLines(){
     return {key:c.key,id:it.id,name:it.name,base:it.price,extras:ex.map(function(e){return {name:e.name,price:e.price};}),price:unit/100,qty:c.qty};
   }).filter(Boolean);
 }
-function orderTotal(){ return cartLines().reduce(function(s,l){ return s+cents(l.price)*l.qty; },0); }
+var DISCOUNT_PCT=10, discount=false;   /* the cashier's "10% off" button, off again after every order */
+function orderSubtotal(){ return cartLines().reduce(function(s,l){ return s+cents(l.price)*l.qty; },0); }
+function orderDiscount(){ return discount?Math.round(orderSubtotal()*DISCOUNT_PCT/100):0; }
+function orderTotal(){ return orderSubtotal()-orderDiscount(); }
 function bump(key,by,id,extras){
   var c=cart.filter(function(x){return x.key===key;})[0];
   if(!c){ if(by>0) cart.push({key:key,id:id,extras:extras||[],qty:by}); }
@@ -128,7 +131,10 @@ function renderSummary(){
     q.appendChild(minus); q.appendChild(el('b',null,l.qty)); q.appendChild(plus);
     li.appendChild(nm); li.appendChild(q); li.appendChild(el('span',null,money(cents(l.price)*l.qty))); ul.appendChild(li);
   });
-  var total=orderTotal();
+  if(!lines.length) discount=false;
+  var total=orderTotal(), off=orderDiscount();
+  $('disc').disabled=!lines.length; $('disc').setAttribute('aria-pressed',String(discount));
+  $('disc-amt').textContent=off?'−'+money(off)+' off '+money(orderSubtotal()):'';
   $('total').textContent=money(total); $('pay-total').textContent=money(total);
   $('total-ll').textContent=total?'= '+llFmt(total/100*cfg.rate)+' at '+cfg.rate.toLocaleString('en-US')+' LL per $1':'';
   $('place').disabled=!lines.length;
@@ -138,20 +144,21 @@ $('add-sel').addEventListener('click',function(){
   var id=sel, ex=cfg.items.filter(function(x){return isExtra(x)&&selExtras[x.id];}).map(function(x){return x.id;});
   sel=null; selExtras={}; warned=false; bump(lineKey(id,ex),1,id,ex);
 });
-function clearOrder(){ cart=[]; sel=null; selExtras={}; warned=false; ['c-name','c-phone','c-note'].forEach(function(id){$(id).value='';}); renderMenu(); renderSummary(); }
+$('disc').addEventListener('click',function(){ discount=!discount; warned=false; renderSummary(); });
+function clearOrder(){ discount=false; cart=[]; sel=null; selExtras={}; warned=false; ['c-name','c-phone','c-note'].forEach(function(id){$(id).value='';}); renderMenu(); renderSummary(); }
 $('clear-cart').addEventListener('click',clearOrder);
 function flash(msg,err){ var f=$('flash'); f.textContent=msg; f.className='flash'+(err?' err':''); f.hidden=false; }
 $('place').addEventListener('click',function(){
   var lines=cartLines(); if(!lines.length) return;
   var waiting=sel?item(sel):null;
   if(waiting&&!warned){ warned=true; flash(waiting.name+' is selected but not added. Tap "Add to order" to include it, or tap "Paid, send order" again to send without it.',true); return; }
-  var total=orderTotal();
+  var total=orderTotal(), subtotal=orderSubtotal(), off=orderDiscount();
   loadAll();
   var today=dayKey(Date.now());
   var n=orders.filter(function(o){return o.day===today;}).reduce(function(m,o){return Math.max(m,Number(o.n)||0);},0)+1;
   var order={id:newId(),n:n,day:today,createdAt:Date.now(),status:'new',
     items:lines.map(function(l){return {name:l.name,price:l.price,qty:l.qty,base:l.base,extras:l.extras};}),
-    total:total/100,method:'mymonty',rate:cfg.rate,
+    subtotal:subtotal/100,discount:off/100,discountPct:off?DISCOUNT_PCT:0,total:total/100,method:'mymonty',rate:cfg.rate,
     name:$('c-name').value.trim(),phone:$('c-phone').value.trim(),note:$('c-note').value.trim()};
   if(!addOrder(order)){ flash('The order was not saved.',true); return; }
   flash('Order #'+n+' is on the Orders screen. '+money(total)+' by MyMonty.');
@@ -287,7 +294,7 @@ $('export').addEventListener('click',async function(){
     lines.forEach(function(l){ var ex=l.extras||[]; count(l.name,l.qty,ex.length&&l.base!=null?l.base:l.price); ex.forEach(function(e){ count(e.name,l.qty,e.price); }); });
     return { 'Order':Number(o.n)||'', 'Date':dayKey(d.getTime()), 'Time':('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2),
       'Items':lines.map(function(l){return l.qty+'x '+lineText(l);}).join(', '), 'Item count':lines.reduce(function(a,l){return a+l.qty;},0),
-      'Total ($)':Number(o.total)||0, 'Paid by':str(o.method), 'Name':str(o.name), 'Phone':str(o.phone), 'Note':str(o.note), 'Status':o.status==='done'?'Done':'Waiting' }; });
+      'Subtotal ($)':o.subtotal!=null?Number(o.subtotal)||0:Number(o.total)||0, 'Discount ($)':Number(o.discount)||0, 'Total ($)':Number(o.total)||0, 'Paid by':str(o.method), 'Name':str(o.name), 'Phone':str(o.phone), 'Note':str(o.note), 'Status':o.status==='done'?'Done':'Waiting' }; });
   soldRows.sort(function(a,b){return b['Sold']-a['Sold'];});
   var cust=customers(list).map(function(r){return {'Name':r.name,'Phone':r.phone,'Orders':r.count,'Spent ($)':r.spent/100};});
   var wb=XLSX.utils.book_new();
