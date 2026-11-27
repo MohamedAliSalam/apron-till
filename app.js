@@ -256,10 +256,15 @@ function orderLines(o){
 function lineText(l){ return l.name+(l.extras&&l.extras.length?' + '+l.extras.map(function(e){return e.name;}).join(' + '):''); }
 function orderText(o){ return orderLines(o).map(function(l){return (l.qty>1?l.qty+'× ':'')+lineText(l);}).join(', '); }
 function setStatus(id,status){
-  if(cloud.on){ shop().collection('orders').doc(id).update(status==='done'?{status:'done',doneAt:Date.now()}:{status:'new'}).catch(syncErr); return; }
+  var patch=status==='done'?{status:'done',doneAt:Date.now()}:status==='cancelled'?{status:'cancelled',cancelledAt:Date.now()}:{status:'new'};
+  askCancel=null;
+  if(cloud.on){ shop().collection('orders').doc(id).update(patch).catch(syncErr); return; }
   loadAll(); var o=orders.filter(function(x){return x.id===id;})[0]; if(!o) return;
-  o.status=status; if(status==='done') o.doneAt=Date.now(); saveOrders(); renderAll();
+  Object.assign(o,patch); saveOrders(); renderAll();
 }
+/* a cancelled order stays in the records and the export, but not in sales, customers or items sold */
+function live(o){ return o.status!=='cancelled'; }
+var askCancel=null;   /* the order whose Cancel button was tapped once and is waiting for the second tap */
 function renderWall(){
   var open=orders.filter(function(o){return o.status==='new';}).sort(function(a,b){return a.createdAt-b.createdAt;});
   var q=$('qcount'); q.hidden=!open.length; q.textContent=open.length;
@@ -275,15 +280,20 @@ function renderWall(){
     var ul=el('ul','lines2'); orderLines(o).forEach(function(l){ ul.appendChild(el('li',null,l.qty+'× '+l.name)); if(l.extras&&l.extras.length) ul.appendChild(el('li','ex','+ '+l.extras.map(function(e){return e.name;}).join(', '))); }); c.appendChild(ul);
     if(o.note) c.appendChild(el('div','note',str(o.note)));
     var b=el('button','big','Done'); b.type='button'; b.addEventListener('click',function(){ setStatus(o.id,'done'); }); c.appendChild(b);
+    var x=el('button','link cancel',askCancel===o.id?'Tap again to cancel order #'+(Number(o.n)||'?'):'Cancel order'); x.type='button';
+    x.addEventListener('click',function(){ if(askCancel===o.id) setStatus(o.id,'cancelled'); else { askCancel=o.id; renderWall(); } }); c.appendChild(x);
     wall.appendChild(c);
   });
-  var done=orders.filter(function(o){return o.status==='done';}).sort(function(a,b){return (b.doneAt||0)-(a.doneAt||0);}).slice(0,8);
+  var done=orders.filter(function(o){return o.status==='done'||o.status==='cancelled';}).sort(function(a,b){return (b.doneAt||b.cancelledAt||0)-(a.doneAt||a.cancelledAt||0);}).slice(0,10);
   var dl=$('donelist'); dl.textContent='';
   if(!done.length) dl.appendChild(el('li')).appendChild(el('span',null,'Nothing finished yet.'));
   done.forEach(function(o){
-    var li=el('li'); li.appendChild(el('span',null,'#'+(Number(o.n)||'?')+'  '+orderText(o)+(o.name?'  ·  '+str(o.name):'')));
-    var u=el('button','link','Put back'); u.type='button'; u.addEventListener('click',function(){ setStatus(o.id,'new'); }); li.appendChild(u);
-    dl.appendChild(li);
+    var gone=o.status==='cancelled', li=el('li'); li.appendChild(el('span',gone?'struck':null,'#'+(Number(o.n)||'?')+'  '+orderText(o)+(o.name?'  ·  '+str(o.name):'')+(gone?'  ·  cancelled':'')));
+    var acts=el('span','rowacts');
+    var u=el('button','link',gone?'Restore':'Put back'); u.type='button'; u.addEventListener('click',function(){ setStatus(o.id,'new'); }); acts.appendChild(u);
+    if(!gone){ var x=el('button','link cancel',askCancel===o.id?'Tap again to cancel':'Cancel'); x.type='button';
+      x.addEventListener('click',function(){ if(askCancel===o.id) setStatus(o.id,'cancelled'); else { askCancel=o.id; renderWall(); } }); acts.appendChild(x); }
+    li.appendChild(acts); dl.appendChild(li);
   });
 }
 setInterval(function(){ if(!$('v-orders').hidden) renderWall(); },30000);
@@ -297,12 +307,12 @@ function customers(list){
   return rows;
 }
 function renderToday(){
-  var today=dayKey(Date.now()), list=orders.filter(function(o){return o.day===today;});
+  var today=dayKey(Date.now()), list=orders.filter(function(o){return o.day===today&&live(o);});
   $('t-orders').textContent=list.length; $('t-sales').textContent=money(list.reduce(function(s,o){return s+cents(o.total);},0));
   $('t-wait').textContent=orders.filter(function(o){return o.status==='new';}).length;
   var drinks=list.reduce(function(s,o){ return s+orderLines(o).reduce(function(a,l){return a+l.qty;},0); },0);
   $('t-split').textContent=drinks+(drinks===1?' item sold today':' items sold today');
-  var rows=customers(histList().slice().sort(function(a,b){return b.createdAt-a.createdAt;}));
+  var rows=customers(histList().filter(live).sort(function(a,b){return b.createdAt-a.createdAt;}));
   var tb=$('cust'); tb.textContent='';
   if(!rows.length){ var tr=el('tr'), td=el('td',null,'Customers who give a name or number appear here.'); td.colSpan=3; tr.appendChild(td); tb.appendChild(tr); }
   rows.forEach(function(r){ var tr=el('tr'); tr.appendChild(el('td',null,r.name||'—')); tr.appendChild(el('td',null,r.phone||'—')); tr.appendChild(el('td','num',r.count)); tb.appendChild(tr); });
@@ -377,12 +387,12 @@ $('export').addEventListener('click',async function(){
   var sold={}, soldRows=[];
   var rows=list.map(function(o){ var d=new Date(Number(o.createdAt)||0), lines=orderLines(o);
     var count=function(name,qty,price){ if(!sold[name]){ sold[name]={'Item':name,'Sold':0,'Sales ($)':0}; soldRows.push(sold[name]); } sold[name]['Sold']+=qty; sold[name]['Sales ($)']=Math.round((sold[name]['Sales ($)']+qty*price)*100)/100; };
-    lines.forEach(function(l){ var ex=l.extras||[]; count(l.name,l.qty,ex.length&&l.base!=null?l.base:l.price); ex.forEach(function(e){ count(e.name,l.qty,e.price); }); });
+    if(live(o)) lines.forEach(function(l){ var ex=l.extras||[]; count(l.name,l.qty,ex.length&&l.base!=null?l.base:l.price); ex.forEach(function(e){ count(e.name,l.qty,e.price); }); });
     return { 'Order':Number(o.n)||'', 'Date':dayKey(d.getTime()), 'Time':('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2),
       'Items':lines.map(function(l){return l.qty+'x '+lineText(l);}).join(', '), 'Item count':lines.reduce(function(a,l){return a+l.qty;},0),
-      'Subtotal ($)':o.subtotal!=null?Number(o.subtotal)||0:Number(o.total)||0, 'Discount ($)':Number(o.discount)||0, 'Total ($)':Number(o.total)||0, 'Paid by':str(o.method), 'Name':str(o.name), 'Phone':str(o.phone), 'Note':str(o.note), 'Status':o.status==='done'?'Done':'Waiting' }; });
+      'Subtotal ($)':o.subtotal!=null?Number(o.subtotal)||0:Number(o.total)||0, 'Discount ($)':Number(o.discount)||0, 'Total ($)':Number(o.total)||0, 'Paid by':str(o.method), 'Name':str(o.name), 'Phone':str(o.phone), 'Note':str(o.note), 'Status':o.status==='done'?'Done':o.status==='cancelled'?'Cancelled':'Waiting' }; });
   soldRows.sort(function(a,b){return b['Sold']-a['Sold'];});
-  var cust=customers(list).map(function(r){return {'Name':r.name,'Phone':r.phone,'Orders':r.count,'Spent ($)':r.spent/100};});
+  var cust=customers(list.filter(live)).map(function(r){return {'Name':r.name,'Phone':r.phone,'Orders':r.count,'Spent ($)':r.spent/100};});
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{'Order':'No orders yet'}]),'Orders');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(soldRows.length?soldRows:[{'Item':'Nothing sold yet'}]),'Items sold');

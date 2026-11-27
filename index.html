@@ -216,7 +216,18 @@ dialog#paydlg::backdrop{background:rgba(8,12,18,.72)}
 .till3 .total{padding-top:6px}
 .till3 .total b{font-size:2.2rem}
 .till3 .hint.ll{margin-top:-6px;font-size:.8rem}
-main[data-v="cashier"]{padding-block:10px}
+main[data-v="cashier"],main[data-v="orders"]{padding-block:10px}
+/* the Orders screen fills one screen too: waiting orders on the left, finished ones on the right */
+.ordersview{grid-template-columns:1fr 340px}
+.ordersview .wall-head{margin:0}
+.ordersview .wall{flex:1;min-height:0;overflow:auto;align-content:start;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.ordersview .ticket{padding:12px;gap:6px}
+.ordersview .ticket .num{font-size:2.6rem}
+.ordersview .ticket .big{font-size:1.2rem;padding:10px}
+.ordersview .lines2{font-size:1.3rem}
+.ordersview .donelist{flex:1;min-height:0;overflow:auto;margin:0}
+.ordersview .donelist li{flex-wrap:wrap;gap:4px 10px;font-size:.95rem}
+@media (max-width:899px){ .ordersview{grid-template-columns:1fr} }
 @media (min-width:900px) and (min-height:520px){
   .till3{height:calc(100dvh - var(--barh,58px) - 20px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
 }
@@ -256,6 +267,9 @@ main[data-v="cashier"]{padding-block:10px}
 .chip[aria-pressed="true"]{background:var(--sel);border-color:var(--sel);color:var(--on-sel)}
 .chip.none{color:var(--bad)}
 @media (max-width:700px){ .row.item,.row.extra{grid-template-columns:1fr 84px 84px 40px} .row.item input.wide:last-of-type,.row.extra input.wide:last-of-type{grid-column:1/-1;order:9} .row.extra{grid-template-columns:1fr 84px 40px} }
+.link.cancel{color:var(--bad);align-self:center}
+.struck{text-decoration:line-through}
+.rowacts{display:flex;gap:10px;flex:none}
 .catgroup{display:flex;flex-direction:column;gap:8px}
 #menu{display:flex;flex-direction:column;gap:18px}
 .lines2{list-style:none;margin:0;padding:0;font-family:var(--display);font-weight:700;text-transform:uppercase;font-size:1.5rem;letter-spacing:.03em;line-height:1.15}
@@ -317,11 +331,15 @@ main[data-v="cashier"]{padding-block:10px}
     </div>
   </section>
 
-  <section id="v-orders" hidden>
-    <div class="wall-head"><h2>Orders to make</h2><span class="label" id="wallcount"></span></div>
-    <div class="wall" id="wall"><p class="empty">No orders waiting. New orders from the cashier show up here by themselves.</p></div>
-    <h2 style="margin-top:32px">Done recently</h2>
-    <ul class="donelist" id="donelist"><li><span>Nothing finished yet.</span></li></ul>
+  <section id="v-orders" class="till3 ordersview" hidden>
+    <div class="panel col">
+      <div class="wall-head"><h2>Orders to make</h2><span class="label" id="wallcount"></span></div>
+      <div class="wall" id="wall"><p class="empty">No orders waiting. New orders from the cashier show up here by themselves.</p></div>
+    </div>
+    <div class="panel col">
+      <h2>Done recently</h2>
+      <ul class="donelist" id="donelist"><li><span>Nothing finished yet.</span></li></ul>
+    </div>
   </section>
 
   <section id="v-admin" class="admin locked" hidden>
@@ -417,7 +435,7 @@ main[data-v="cashier"]{padding-block:10px}
 </dialog>
 
 <script src="xlsx.full.min.js"></script>
-<script src="firebase-config.js"></script>
-<script src="app.js"></script>
+<script src="firebase-config.js?v=21"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>

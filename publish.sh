@@ -5,6 +5,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 TOKEN="$(gh auth token --user MohamedAliSalam)"
+# Stamp the page with the version from sw.js, so the page and its code always load as a matching pair.
+V="$(grep -o 'apron-till-v[0-9]*' sw.js | grep -o '[0-9]*$')"
+sed -i '' -E "s/(app\\.js|firebase-config\\.js)\\?v=[0-9]+/\\1?v=${V}/g" index.html
 git add -A
 git diff --cached --quiet || git -c user.name="MohamedAliSalam" -c user.email="102904729+MohamedAliSalam@users.noreply.github.com" commit -q -m "Update till ($(date +%Y-%m-%d))"
 URL="https://x-access-token:${TOKEN}@github.com/MohamedAliSalam/apron-till.git"

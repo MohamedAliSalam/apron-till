@@ -1,7 +1,8 @@
 // Keeps the app working without internet. Bump the version to push an update.
-const CACHE = 'apron-till-v20';
+const CACHE = 'apron-till-v21';
 const FILES = ['./', 'index.html', 'app.js', 'firebase-config.js', 'xlsx.full.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'monty-qr.png'];
-self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
+// 'reload' skips the browser's own 10-minute copy, so a new version is never built from old files.
+self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, {cache: 'reload'})))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
@@ -11,12 +12,22 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || !CACHEABLE(url)) return;
   e.respondWith(caches.open(CACHE).then(async cache => {
-    const hit = await cache.match(e.request, {ignoreSearch: true});
-    const fresh = fetch(e.request).then(res => { if (res && (res.ok || res.type === 'opaque')) cache.put(e.request, res.clone()); return res; });
-    // The app's own files: newest from the network when online, the saved copy when offline,
-    // so every device gets an update the next time it opens with a connection.
-    if (url.origin === self.location.origin) return fresh.catch(() => hit || Response.error());
+    const own = url.origin === self.location.origin;
+    const saved = async () => (await cache.match(e.request)) || (await cache.match(e.request, {ignoreSearch: true}));
+    // The app's own files: always ask the server for the newest copy ('no-cache' revalidates instead of
+    // trusting the browser's 10-minute copy), and use the saved copy only when offline.
+    if (own) {
+      try {
+        const res = await fetch(e.request, {cache: 'no-cache'});
+        if (res && res.ok) cache.put(e.request, res.clone());
+        return res;
+      } catch (err) { return (await saved()) || Response.error(); }
+    }
     // Fonts and the sync library never change at a given address: saved copy first.
-    return hit || fresh.catch(() => Response.error());
+    const hit = await saved();
+    if (hit) return hit;
+    const res = await fetch(e.request);
+    if (res && (res.ok || res.type === 'opaque')) cache.put(e.request, res.clone());
+    return res;
   }));
 });
