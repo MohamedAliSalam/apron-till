@@ -2,28 +2,32 @@ var $=function(id){return document.getElementById(id);};
 function el(tag,cls,text){var e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e;}
 function cents(v){var n=parseFloat(String(v).replace(',','.')); return isFinite(n)?Math.round(n*100):0;}
 function money(c){c=Math.round(c); return (c<0?'-':'')+'$'+(Math.abs(c)/100).toFixed(Math.abs(c)%100?2:0);}
+function llFmt(n){ return Math.round(n).toLocaleString('en-US')+' LL'; }
 function dayKey(t){var d=new Date(t); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
 function str(v){return v==null?'':String(v);}
 function newId(){ return 'i'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36); }
 
-/* ---------- storage: everything lives on this device ---------- */
+/* ---------- storage ---------- */
 var K_CFG='apron.till.menu', K_ORD='apron.till.orders';
-var DEFAULT_MENU={tickets:[{id:'shift',name:'Shift',price:5},{id:'double',name:'Double Shift',price:6}],
-  addons:[{id:'shot',name:'Extra shot',price:1},{id:'flavour',name:'Flavour',price:1},{id:'matcha',name:'Matcha',price:1}],
-  rate:89000,usdStep:5};
 function readJSON(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
 function writeJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
-function cleanMenu(m){ var ok=function(a){return (Array.isArray(a)?a:[]).filter(function(x){return x&&x.id&&str(x.name).trim();});};
-  var rate=Math.round(Number(m&&m.rate)), step=Number(m&&m.usdStep);
-  return {tickets:ok(m&&m.tickets),addons:ok(m&&m.addons),rate:rate>0?rate:89000,usdStep:[1,5,10,20].indexOf(step)>=0?step:5}; }
+/* A menu is a flat list of items, each with a group. Older saved menus had "tickets" and
+   "add-ons"; those are carried over as items so nothing disappears. */
+function cleanMenu(m){
+  var take=function(arr,cat){ return (Array.isArray(arr)?arr:[]).filter(function(x){return x&&x.id&&str(x.name).trim();})
+    .map(function(x){ return {id:str(x.id),name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:str(x.cat).trim()||cat}; }); };
+  var items=take(m&&m.items,'Drinks');
+  if(!items.length&&m) items=take(m.tickets,'Drinks').concat(take(m.addons,'Extras'));
+  var rate=Math.round(Number(m&&m.rate));
+  return {items:items,rate:rate>0?rate:89000};
+}
 var cfg, orders;
 /* cloud.on means orders and the menu come from the shared database instead of this device */
 var cloud={ready:false,on:false,user:null,db:null,unsub:[],pending:false}, pastOrders=null;
 function localOrders(){ var o=readJSON(K_ORD); return (Array.isArray(o)?o:[]).filter(function(x){return x&&x.id;}); }
-function loadAll(){
-  if(cloud.on) return;
-  var m=readJSON(K_CFG); cfg=cleanMenu(m||DEFAULT_MENU); orders=localOrders();
-}
+function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)); orders=localOrders(); }
+function saveOrders(){ var ok=writeJSON(K_ORD,orders); if(!ok) warn('This device could not save the order. Its storage may be full or blocked. Export your orders, then free up space.'); return ok; }
+function warn(msg){ var s=$('status'); s.textContent=msg; s.hidden=!msg; }
 function shop(){ return cloud.db.collection('shops').doc('main'); }
 function syncErr(e){ warn(e&&e.code==='permission-denied'?'Sync was refused for this login. Check the shop login in Admin.':'Sync hit a problem. Orders are kept on this device and will be sent when it clears.'); }
 function addOrder(o){
@@ -46,12 +50,10 @@ async function refreshHistory(){
   if(!cloud.on) return;
   try{ var snap=await shop().collection('orders').get(); pastOrders=snap.docs.map(function(d){return Object.assign({},d.data(),{id:d.id});}); }catch(e){}
 }
-function saveOrders(){ var ok=writeJSON(K_ORD,orders); if(!ok) warn('This tablet could not save the order. Its storage may be full or blocked. Export your orders, then free up space.'); return ok; }
-function warn(msg){ var s=$('status'); s.textContent=msg; s.hidden=!msg; }
 loadAll();
 if(navigator.storage&&navigator.storage.persist){ try{ navigator.storage.persist(); }catch(e){} }
 
-var draft={ticket:null,addons:{},method:'cash'};
+var cart=[];            /* [{id, qty}] in the order the cashier tapped them */
 var edit=null, dirty=false;
 
 /* ---------- tabs ---------- */
@@ -64,167 +66,85 @@ function showView(){
 window.addEventListener('hashchange',showView); showView();
 
 /* ---------- cashier ---------- */
-function ticket(){ return cfg.tickets.filter(function(t){return t.id===draft.ticket;})[0]||null; }
-function chosenAddons(){ return cfg.addons.filter(function(a){return draft.addons[a.id];}); }
-function orderTotal(){ var t=ticket(); if(!t) return 0; return cents(t.price)+chosenAddons().reduce(function(s,a){return s+cents(a.price);},0); }
-function renderChoices(){
-  var box=$('tickets'); box.textContent='';
-  if(!cfg.tickets.length) box.appendChild(el('p','empty','No tickets yet. Add them in the Admin tab.'));
-  cfg.tickets.forEach(function(t){
-    var b=el('button','choice'); b.type='button'; b.setAttribute('aria-pressed',String(draft.ticket===t.id));
-    b.appendChild(el('b',null,str(t.name))); b.appendChild(el('span',null,money(cents(t.price))));
-    b.addEventListener('click',function(){ draft.ticket=t.id; renderChoices(); renderSummary(); });
-    box.appendChild(b);
-  });
-  var ab=$('addons'), btn=$('addbtn'), picked=chosenAddons(); ab.textContent='';
-  btn.disabled=!cfg.addons.length;
-  $('addbtn-s').textContent=!cfg.addons.length?'None set up yet. Add them in Admin.':picked.length?picked.map(function(a){return str(a.name);}).join(', '):'None. Tap to add.';
-  btn.setAttribute('aria-pressed',String(picked.length>0));
-  cfg.addons.forEach(function(a){
-    var on=!!draft.addons[a.id], b=el('button','addrow'); b.type='button'; b.setAttribute('aria-pressed',String(on));
-    b.appendChild(el('span',null,(on?'✓ ':'')+str(a.name))); b.appendChild(el('span',null,'+'+money(cents(a.price))));
-    b.addEventListener('click',function(){ draft.addons[a.id]=!draft.addons[a.id]; renderChoices(); renderSummary(); });
-    ab.appendChild(b);
-  });
+function item(id){ return cfg.items.filter(function(x){return x.id===id;})[0]||null; }
+function cartLines(){ return cart.map(function(c){ var it=item(c.id); return it?{id:it.id,name:it.name,price:it.price,qty:c.qty}:null; }).filter(Boolean); }
+function orderTotal(){ return cartLines().reduce(function(s,l){ return s+cents(l.price)*l.qty; },0); }
+function bump(id,by){
+  var c=cart.filter(function(x){return x.id===id;})[0];
+  if(!c){ if(by>0) cart.push({id:id,qty:by}); }
+  else { c.qty+=by; if(c.qty<=0) cart=cart.filter(function(x){return x!==c;}); }
+  renderMenu(); renderSummary();
 }
-$('addbtn').addEventListener('click',function(){ var l=$('addons'); l.hidden=!l.hidden; this.setAttribute('aria-expanded',String(!l.hidden)); });
-function llFmt(n){ return Math.round(n).toLocaleString('en-US')+' LL'; }
-/* Works in Lebanese pounds so dollar and pound payments can be mixed. Change is split into
-   dollars (down to the smallest note set in Admin) and the rest in pounds, rounded to 1,000 LL. */
-function cashState(){
-  var total=orderTotal(), rate=cfg.rate, step=cfg.usdStep;
-  var rawU=$('received').value.trim(), rawL=$('received-ll').value.replace(/[^\d]/g,'');
-  var usd=Math.max(0,cents(rawU))/100, ll=parseInt(rawL,10)||0, empty=rawU===''&&rawL==='';
-  var totalLL=total/100*rate, paidLL=empty?totalLL:usd*rate+ll, diffLL=paidLL-totalLL;
-  var st={usd:empty?total/100:usd,ll:ll,paidUsd:Math.round(paidLL/rate*100)/100,owed:diffLL<-500,owedLL:0,usdBack:0,llBack:0,changeUsdTotal:0,text:'',maxUsd:0};
-  if(st.owed){ st.owedLL=-diffLL; return st; }
-  if(diffLL<500) return st;
-  st.changeUsdTotal=Math.round(diffLL/rate*100)/100;
-  st.maxUsd=Math.floor(diffLL/rate+1e-9);
-  var def=Math.floor(st.maxUsd/step)*step;
-  st.usdBack=Math.max(0,Math.min(st.maxUsd,def+(draft.usdAdj||0)*step));
-  st.llBack=Math.max(0,Math.round((diffLL-st.usdBack*rate)/1000)*1000);
-  st.text=[st.usdBack?'$'+st.usdBack:'',st.llBack?llFmt(st.llBack):''].filter(Boolean).join(' + ');
-  return st;
+function renderMenu(){
+  var box=$('menu'); box.textContent='';
+  if(!cfg.items.length){ box.appendChild(el('p','empty','The menu is empty. Add your drinks in the Admin tab.')); return; }
+  var cats=[]; cfg.items.forEach(function(it){ if(cats.indexOf(it.cat)<0) cats.push(it.cat); });
+  cats.forEach(function(cat){
+    var g=el('div','catgroup'); g.appendChild(el('span','label',cat));
+    var grid=el('div','choices');
+    cfg.items.filter(function(it){return it.cat===cat;}).forEach(function(it){
+      var inCart=cart.filter(function(c){return c.id===it.id;})[0];
+      var b=el('button','choice'); b.type='button'; b.setAttribute('aria-pressed',String(!!inCart));
+      b.appendChild(el('b',null,it.name)); b.appendChild(el('span',null,money(cents(it.price))));
+      if(inCart) b.appendChild(el('span','badge',inCart.qty));
+      b.addEventListener('click',function(){ bump(it.id,1); });
+      grid.appendChild(b);
+    });
+    g.appendChild(grid); box.appendChild(g);
+  });
 }
 function renderSummary(){
-  var t=ticket(), ul=$('lines'); ul.textContent='';
-  if(!t){ ul.appendChild(el('li')).appendChild(el('span',null,'Pick a ticket to start')); }
-  else{ [t].concat(chosenAddons()).forEach(function(x,i){ var li=el('li'); li.appendChild(el('span',null,(i?'+ ':'')+str(x.name))); li.appendChild(el('span',null,money(cents(x.price)))); ul.appendChild(li); }); }
-  var total=orderTotal(); $('total').textContent=money(total);
-  var cash=draft.method==='cash'; $('cashbox').hidden=!cash;
-  $('whishbox').hidden=draft.method!=='whish'; $('whish-total').textContent=money(total); showWhishQr(total);
-  var cs=cashState(), box=$('changebox');
-  $('total-ll').textContent=t?'= '+llFmt(total/100*cfg.rate)+' at '+cfg.rate.toLocaleString('en-US')+' LL per $1':'';
-  box.className='change'+(cs.owed?' owed':cs.text?' back':'');
-  $('changelabel').textContent=cs.owed?'Still owed':'Give back';
-  $('change').textContent=cs.owed?money(Math.ceil(cs.owedLL/cfg.rate*100))+' or '+llFmt(Math.ceil(cs.owedLL/1000)*1000):(cs.text||'Nothing');
-  $('splitbox').hidden=!(cs.maxUsd>0); $('split-note').textContent=cs.maxUsd>0?'Change is '+money(Math.round(cs.changeUsdTotal*100))+' in total':'';
-  $('place').disabled=!t||(cash&&cs.owed);
+  cart=cart.filter(function(c){return item(c.id);});
+  var lines=cartLines(), ul=$('cart'); ul.textContent='';
+  if(!lines.length) ul.appendChild(el('li','none','Tap a drink to add it.'));
+  lines.forEach(function(l){
+    var li=el('li'), nm=el('span','nm',l.name); nm.appendChild(el('small',null,money(cents(l.price))+' each'));
+    var q=el('span','qty'), minus=el('button',null,'−'), plus=el('button',null,'+');
+    minus.type='button'; plus.type='button'; minus.setAttribute('aria-label','One fewer '+l.name); plus.setAttribute('aria-label','One more '+l.name);
+    minus.addEventListener('click',function(){ bump(l.id,-1); }); plus.addEventListener('click',function(){ bump(l.id,1); });
+    q.appendChild(minus); q.appendChild(el('b',null,l.qty)); q.appendChild(plus);
+    li.appendChild(nm); li.appendChild(q); li.appendChild(el('span',null,money(cents(l.price)*l.qty))); ul.appendChild(li);
+  });
+  var total=orderTotal();
+  $('total').textContent=money(total); $('pay-total').textContent=money(total);
+  $('total-ll').textContent=total?'= '+llFmt(total/100*cfg.rate)+' at '+cfg.rate.toLocaleString('en-US')+' LL per $1':'';
+  $('place').disabled=!lines.length;
 }
-['received','received-ll'].forEach(function(id){ $(id).addEventListener('input',function(){ draft.usdAdj=0; renderSummary(); }); });
-$('usd-more').addEventListener('click',function(){ var c=cashState(); if(c.usdBack<c.maxUsd){ draft.usdAdj=(draft.usdAdj||0)+1; renderSummary(); } });
-$('usd-less').addEventListener('click',function(){ var c=cashState(); if(c.usdBack>0){ draft.usdAdj=Math.ceil(c.usdBack/cfg.usdStep)-1-Math.floor(c.maxUsd/cfg.usdStep); renderSummary(); } });
-$('quick').addEventListener('click',function(e){ var q=e.target.dataset&&e.target.dataset.q; if(!q) return; draft.usdAdj=0;
-  if(q==='exact'){ $('received').value=''; $('received-ll').value=''; }
-  else if(q==='exactll'){ $('received').value=''; $('received-ll').value=Math.round(orderTotal()/100*cfg.rate); }
-  else { $('received').value=q; $('received-ll').value=''; }
-  renderSummary(); });
-$('method').addEventListener('click',function(e){ var m=e.target.dataset&&e.target.dataset.m; if(!m) return; draft.method=m;
-  [].forEach.call($('method').children,function(b){ b.setAttribute('aria-pressed',String(b.dataset.m===m)); }); renderSummary(); });
+function clearOrder(){ cart=[]; ['c-name','c-phone','c-note'].forEach(function(id){$(id).value='';}); renderMenu(); renderSummary(); }
+$('clear-cart').addEventListener('click',clearOrder);
 function flash(msg,err){ var f=$('flash'); f.textContent=msg; f.className='flash'+(err?' err':''); f.hidden=false; }
 $('place').addEventListener('click',function(){
-  var t=ticket(); if(!t) return;
-  var total=orderTotal(), cash=draft.method==='cash', cs=cash?cashState():null;
-  if(cs&&cs.owed) return;
+  var lines=cartLines(); if(!lines.length) return;
+  var total=orderTotal();
   loadAll();
   var today=dayKey(Date.now());
   var n=orders.filter(function(o){return o.day===today;}).reduce(function(m,o){return Math.max(m,Number(o.n)||0);},0)+1;
-  var order=({id:newId(),n:n,day:today,createdAt:Date.now(),status:'new',
-    ticket:{name:str(t.name),price:cents(t.price)/100},
-    addons:chosenAddons().map(function(a){return {name:str(a.name),price:cents(a.price)/100};}),
-    total:total/100,method:draft.method,received:cs?cs.paidUsd:total/100,change:cs?cs.changeUsdTotal:0,
-    receivedUsd:cs?cs.usd:0,receivedLbp:cs?cs.ll:0,changeUsd:cs?cs.usdBack:0,changeLbp:cs?cs.llBack:0,rate:cfg.rate,
-    name:$('c-name').value.trim(),phone:$('c-phone').value.trim(),note:$('c-note').value.trim()});
+  var order={id:newId(),n:n,day:today,createdAt:Date.now(),status:'new',
+    items:lines.map(function(l){return {name:l.name,price:l.price,qty:l.qty};}),
+    total:total/100,method:'mymonty',rate:cfg.rate,
+    name:$('c-name').value.trim(),phone:$('c-phone').value.trim(),note:$('c-note').value.trim()};
   if(!addOrder(order)){ flash('The order was not saved.',true); return; }
-  flash('Order #'+n+' is on the Orders screen.'+(cs&&cs.text?' Give back '+cs.text+'.':''));
-  draft.ticket=null; draft.addons={}; $('addons').hidden=true; $('addbtn').setAttribute('aria-expanded','false');
-  draft.usdAdj=0; ['c-name','c-phone','c-note','received','received-ll'].forEach(function(id){$(id).value='';});
-  renderAll();
+  flash('Order #'+n+' is on the Orders screen. '+money(total)+' by MyMonty.');
+  clearOrder(); renderAll();
 });
-
-function qrMissing(){ if(shownQr&&shownQr!=='main') return; $('whish-qr').hidden=true; $('whish-missing').hidden=false; }
-$('whish-qr').addEventListener('error',qrMissing);
-if($('whish-qr').complete&&!$('whish-qr').naturalWidth) qrMissing();
-
-/* ---------- Whish QR codes by amount ---------- */
-var K_WQR='apron.till.whishqrs', K_WQX='apron.till.whishqr.keep', whishQrs=[], whishExpires=true, shownQr='';
-function loadQrsLocal(){ var a=readJSON(K_WQR); whishQrs=(Array.isArray(a)?a:[]).filter(function(q){return q&&q.img&&q.amount>0;}); whishExpires=readJSON(K_WQX)!==true; }
-function qrOld(q){ return whishExpires&&Date.now()-(Number(q.addedAt)||0)>48*3600*1000; }
-function qrFor(totalCents){ var q=whishQrs.filter(function(x){return cents(x.amount)===totalCents;})[0]; return q&&!qrOld(q)?q:null; }
-function showWhishQr(totalCents){
-  var q=totalCents>0?qrFor(totalCents):null, img=$('whish-qr'), key=q?'amount:'+q.amount+':'+q.addedAt:'main';
-  $('whish-label').textContent=q?'Customer scans to pay '+money(totalCents):'Customer scans to pay';
-  $('whish-note').textContent=q?'This QR already has the amount in it.':'The customer types the amount in Whish.';
-  if(key===shownQr) return; shownQr=key;
-  img.hidden=false; $('whish-missing').hidden=true; img.src=q?q.img:'whish-qr.png';
-}
-function saveQr(rec){
-  var id=String(cents(rec.amount));
-  whishQrs=whishQrs.filter(function(q){return String(cents(q.amount))!==id;}).concat([rec]); writeJSON(K_WQR,whishQrs);
-  if(cloud.on) shop().collection('whishqr').doc(id).set(rec).catch(syncErr);
-  shownQr=''; renderQrs(); renderSummary();
-}
-function removeQr(q){
-  var id=String(cents(q.amount));
-  whishQrs=whishQrs.filter(function(x){return String(cents(x.amount))!==id;}); writeJSON(K_WQR,whishQrs);
-  if(cloud.on) shop().collection('whishqr').doc(id).delete().catch(syncErr);
-  shownQr=''; renderQrs(); renderSummary();
-}
-function renderQrs(){
-  var box=$('qr-list'); box.textContent=''; $('qr-expires').checked=whishExpires;
-  if(!whishQrs.length) box.appendChild(el('p','empty','No amount QRs yet. Type a total, then choose its QR image.'));
-  whishQrs.slice().sort(function(a,b){return a.amount-b.amount;}).forEach(function(q){
-    var c=el('div','qrcard'), im=el('img'), hours=Math.floor((Date.now()-(Number(q.addedAt)||0))/3600000);
-    im.src=q.img; im.alt='Whish QR for '+money(cents(q.amount)); c.appendChild(im);
-    c.appendChild(el('b',null,money(cents(q.amount))));
-    c.appendChild(el('small',qrOld(q)?'old':null,qrOld(q)?'Not shown: older than 48 hours':hours<1?'Added just now':hours<24?'Added '+hours+' h ago':'Added '+Math.floor(hours/24)+' d ago'));
-    var b=el('button','link','Remove'); b.type='button'; b.addEventListener('click',function(){ removeQr(q); }); c.appendChild(b);
-    box.appendChild(c);
-  });
-}
-function shrinkImage(file){
-  return new Promise(function(ok,no){
-    var r=new FileReader(); r.onerror=no;
-    r.onload=function(){ var im=new Image(); im.onerror=no; im.onload=function(){
-      var k=Math.min(1,640/Math.max(im.width,im.height)), c=document.createElement('canvas'); c.width=Math.round(im.width*k); c.height=Math.round(im.height*k);
-      var g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(im,0,0,c.width,c.height);
-      var out=c.toDataURL('image/png'); if(out.length>450000) out=c.toDataURL('image/jpeg',.9); ok(out);
-    }; im.src=r.result; };
-    r.readAsDataURL(file);
-  });
-}
-$('qr-file').addEventListener('change',async function(){
-  var f=this.files&&this.files[0], msg=$('qr-msg'), amt=cents($('qr-amount').value); this.value='';
-  if(!f) return;
-  if(amt<=0){ msg.textContent='Type the order total first, then choose the image.'; return; }
-  try{ var img=await shrinkImage(f); saveQr({amount:amt/100,img:img,addedAt:Date.now()}); $('qr-amount').value=''; msg.textContent='Saved the QR for '+money(amt)+'.'; }
-  catch(e){ msg.textContent='That file could not be read as an image.'; }
-});
-$('qr-expires').addEventListener('change',function(){
-  whishExpires=this.checked; writeJSON(K_WQX,!whishExpires);
-  if(cloud.on) shop().collection('config').doc('whish').set({expires:whishExpires}).catch(syncErr);
-  shownQr=''; renderQrs(); renderSummary();
-});
-loadQrsLocal();
+var payQr=$('pay-qr');
+payQr.addEventListener('load',function(){ payQr.hidden=false; });
+if(payQr.complete&&payQr.naturalWidth) payQr.hidden=false;
 
 /* ---------- orders wall ---------- */
+/* what an order contains, old one-ticket orders included */
+function orderLines(o){
+  if(Array.isArray(o.items)&&o.items.length) return o.items.map(function(l){ return {name:str(l&&l.name),qty:Number(l&&l.qty)||1,price:Number(l&&l.price)||0}; });
+  var out=[]; if(o.ticket&&o.ticket.name) out.push({name:str(o.ticket.name),qty:1,price:Number(o.ticket.price)||0});
+  (Array.isArray(o.addons)?o.addons:[]).forEach(function(a){ out.push({name:str(a&&a.name),qty:1,price:Number(a&&a.price)||0}); });
+  return out;
+}
+function orderText(o){ return orderLines(o).map(function(l){return (l.qty>1?l.qty+'× ':'')+l.name;}).join(', '); }
 function setStatus(id,status){
   if(cloud.on){ shop().collection('orders').doc(id).update(status==='done'?{status:'done',doneAt:Date.now()}:{status:'new'}).catch(syncErr); return; }
   loadAll(); var o=orders.filter(function(x){return x.id===id;})[0]; if(!o) return;
   o.status=status; if(status==='done') o.doneAt=Date.now(); saveOrders(); renderAll();
 }
-function orderLabel(o){ return str(o.ticket&&o.ticket.name)||'Order'; }
 function renderWall(){
   var open=orders.filter(function(o){return o.status==='new';}).sort(function(a,b){return a.createdAt-b.createdAt;});
   var q=$('qcount'); q.hidden=!open.length; q.textContent=open.length;
@@ -237,11 +157,7 @@ function renderWall(){
     var mins=Math.max(0,Math.floor((Date.now()-o.createdAt)/60000));
     top.appendChild(el('span','wait',mins<1?'just now':mins+' min ago')); c.appendChild(top);
     if(o.name) c.appendChild(el('div','who',str(o.name)));
-    c.appendChild(el('div','what',orderLabel(o)));
-    var tags=el('div','tags');
-    (Array.isArray(o.addons)?o.addons:[]).forEach(function(a){ tags.appendChild(el('span','tag','+ '+str(a&&a.name))); });
-    if(!tags.children.length) tags.appendChild(el('span','tag','No add-ons'));
-    c.appendChild(tags);
+    var ul=el('ul','lines2'); orderLines(o).forEach(function(l){ ul.appendChild(el('li',null,l.qty+'× '+l.name)); }); c.appendChild(ul);
     if(o.note) c.appendChild(el('div','note',str(o.note)));
     var b=el('button','big','Done'); b.type='button'; b.addEventListener('click',function(){ setStatus(o.id,'done'); }); c.appendChild(b);
     wall.appendChild(c);
@@ -250,7 +166,7 @@ function renderWall(){
   var dl=$('donelist'); dl.textContent='';
   if(!done.length) dl.appendChild(el('li')).appendChild(el('span',null,'Nothing finished yet.'));
   done.forEach(function(o){
-    var li=el('li'); li.appendChild(el('span',null,'#'+(Number(o.n)||'?')+'  '+orderLabel(o)+(o.name?'  ·  '+str(o.name):'')));
+    var li=el('li'); li.appendChild(el('span',null,'#'+(Number(o.n)||'?')+'  '+orderText(o)+(o.name?'  ·  '+str(o.name):'')));
     var u=el('button','link','Put back'); u.type='button'; u.addEventListener('click',function(){ setStatus(o.id,'new'); }); li.appendChild(u);
     dl.appendChild(li);
   });
@@ -267,11 +183,10 @@ function customers(list){
 }
 function renderToday(){
   var today=dayKey(Date.now()), list=orders.filter(function(o){return o.day===today;});
-  var sum=function(arr){return arr.reduce(function(s,o){return s+cents(o.total);},0);};
-  $('t-orders').textContent=list.length; $('t-sales').textContent=money(sum(list));
+  $('t-orders').textContent=list.length; $('t-sales').textContent=money(list.reduce(function(s,o){return s+cents(o.total);},0));
   $('t-wait').textContent=orders.filter(function(o){return o.status==='new';}).length;
-  var by=function(m){return money(sum(list.filter(function(o){return o.method===m;})));};
-  $('t-split').textContent='Cash '+by('cash')+'  ·  Whish '+by('whish');
+  var drinks=list.reduce(function(s,o){ return s+orderLines(o).reduce(function(a,l){return a+l.qty;},0); },0);
+  $('t-split').textContent=drinks+(drinks===1?' item sold today':' items sold today');
   var rows=customers(histList().slice().sort(function(a,b){return b.createdAt-a.createdAt;}));
   var tb=$('cust'); tb.textContent='';
   if(!rows.length){ var tr=el('tr'), td=el('td',null,'Customers who give a name or number appear here.'); td.colSpan=3; tr.appendChild(td); tb.appendChild(tr); }
@@ -282,32 +197,37 @@ function renderToday(){
   };
 }
 function renderEditor(){
-  [['tickets','e-tickets'],['addons','e-addons']].forEach(function(p){
-    var box=$(p[1]); box.textContent='';
-    if(!edit[p[0]].length) box.appendChild(el('p','empty',p[0]==='tickets'?'No tickets yet. Add your first one below.':'No add-ons yet. Add your first one below.'));
-    edit[p[0]].forEach(function(item,i){
-      var row=el('div','row'), name=el('input'), price=el('input'), del=el('button',null,'×');
-      name.value=str(item.name); name.placeholder='Name'; name.id=p[1]+'-n-'+item.id; name.setAttribute('aria-label','Name');
-      price.value=item.price===''?'':str(item.price); price.placeholder='$'; price.inputMode='decimal'; price.id=p[1]+'-p-'+item.id; price.setAttribute('aria-label','Price in dollars');
-      name.addEventListener('input',function(){ item.name=name.value; dirty=true; });
-      price.addEventListener('input',function(){ item.price=price.value; dirty=true; });
-      del.type='button'; del.setAttribute('aria-label','Remove '+str(item.name));
-      del.addEventListener('click',function(){ edit[p[0]].splice(i,1); dirty=true; renderEditor(); });
-      row.appendChild(name); row.appendChild(price); row.appendChild(del); box.appendChild(row);
-    });
+  var box=$('e-items'); box.textContent='';
+  if(!edit.items.length) box.appendChild(el('p','empty','No drinks yet. Add your first one below.'));
+  var dl=$('cats'), cats=[]; dl.textContent='';
+  edit.items.forEach(function(it){ var c=str(it.cat).trim(); if(c&&cats.indexOf(c)<0) cats.push(c); });
+  cats.forEach(function(c){ var o=el('option'); o.value=c; dl.appendChild(o); });
+  edit.items.forEach(function(it,i){
+    var row=el('div','row item'), name=el('input'), cat=el('input','cat'), price=el('input'), del=el('button',null,'×');
+    name.value=str(it.name); name.placeholder='Drink name'; name.id='e-n-'+it.id; name.setAttribute('aria-label','Drink name');
+    cat.value=str(it.cat); cat.placeholder='Group'; cat.id='e-c-'+it.id; cat.setAttribute('list','cats'); cat.setAttribute('aria-label','Group');
+    price.value=it.price===''?'':str(it.price); price.placeholder='$'; price.inputMode='decimal'; price.id='e-p-'+it.id; price.setAttribute('aria-label','Price in dollars');
+    name.addEventListener('input',function(){ it.name=name.value; dirty=true; });
+    cat.addEventListener('input',function(){ it.cat=cat.value; dirty=true; });
+    price.addEventListener('input',function(){ it.price=price.value; dirty=true; });
+    del.type='button'; del.setAttribute('aria-label','Remove '+str(it.name));
+    del.addEventListener('click',function(){ edit.items.splice(i,1); dirty=true; renderEditor(); });
+    row.appendChild(name); row.appendChild(cat); row.appendChild(price); row.appendChild(del); box.appendChild(row);
   });
 }
-$('add-ticket').addEventListener('click',function(){ edit.tickets.push({id:newId(),name:'',price:''}); dirty=true; renderEditor(); });
-$('add-addon').addEventListener('click',function(){ edit.addons.push({id:newId(),name:'',price:''}); dirty=true; renderEditor(); });
-$('save-menu').addEventListener('click',function(){
-  var clean=function(arr){ return arr.filter(function(x){return str(x.name).trim();}).map(function(x){return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100};}); };
-  var rate=parseInt(String($('e-rate').value).replace(/[^\d]/g,''),10)||cfg.rate;
-  var body={tickets:clean(edit.tickets),addons:clean(edit.addons),rate:rate,usdStep:Number($('e-step').value)||5};
-  if(writeJSON(K_CFG,body)){ if(cloud.on) shop().collection('config').doc('menu').set(body).catch(syncErr); cfg=cleanMenu(body); dirty=false; loadEditor(); renderAll(); $('save-msg').textContent='Saved. The cashier tab is updated.'; }
-  else $('save-msg').textContent='Not saved. This tablet’s storage is full or blocked.';
+$('add-item').addEventListener('click',function(){
+  var last=edit.items[edit.items.length-1]; edit.items.push({id:newId(),name:'',price:'',cat:last?last.cat:'Coffee'}); dirty=true; renderEditor();
+  var rows=$('e-items').querySelectorAll('.row.item'); if(rows.length) rows[rows.length-1].querySelector('input').focus();
 });
-function loadEditor(){ edit={tickets:cfg.tickets.map(function(t){return {id:t.id,name:t.name,price:t.price};}),addons:cfg.addons.map(function(a){return {id:a.id,name:a.name,price:a.price};})}; $('e-rate').value=cfg.rate; $('e-step').value=String(cfg.usdStep); renderEditor(); }
-['e-rate','e-step'].forEach(function(id){ $(id).addEventListener('input',function(){ dirty=true; }); $(id).addEventListener('change',function(){ dirty=true; }); });
+$('e-rate').addEventListener('input',function(){ dirty=true; });
+$('save-menu').addEventListener('click',function(){
+  var items=edit.items.filter(function(x){return str(x.name).trim();}).map(function(x){ return {id:x.id,name:str(x.name).trim(),price:Math.max(0,cents(x.price))/100,cat:str(x.cat).trim()||'Drinks'}; });
+  var rate=parseInt(String($('e-rate').value).replace(/[^\d]/g,''),10)||cfg.rate;
+  var body={items:items,rate:rate};
+  if(writeJSON(K_CFG,body)){ if(cloud.on) shop().collection('config').doc('menu').set(body).catch(syncErr); cfg=cleanMenu(body); dirty=false; loadEditor(); renderAll(); $('save-msg').textContent='Saved. The cashier tab is updated.'; }
+  else $('save-msg').textContent='Not saved. This device’s storage is full or blocked.';
+});
+function loadEditor(){ edit={items:cfg.items.map(function(t){return {id:t.id,name:t.name,price:t.price,cat:t.cat};})}; $('e-rate').value=cfg.rate; renderEditor(); }
 
 /* ---------- export, backup, reset ---------- */
 function saveFile(name,blob){
@@ -319,16 +239,17 @@ $('export').addEventListener('click',async function(){
   if(!window.XLSX){ msg.textContent='The Excel export did not load. Reload the app and try again.'; return; }
   await refreshHistory();
   var list=histList().slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});
-  var rows=list.map(function(o){ var d=new Date(Number(o.createdAt)||0); return {
-    'Order':Number(o.n)||'', 'Date':dayKey(d.getTime()), 'Time':('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2),
-    'Ticket':str(o.ticket&&o.ticket.name), 'Add-ons':(Array.isArray(o.addons)?o.addons:[]).map(function(a){return str(a&&a.name);}).join(', '),
-    'Total ($)':Number(o.total)||0, 'Paid by':str(o.method),
-    'Received ($)':o.receivedUsd!=null?Number(o.receivedUsd)||0:Number(o.received)||0, 'Received (LL)':Number(o.receivedLbp)||0,
-    'Change ($)':o.changeUsd!=null?Number(o.changeUsd)||0:Number(o.change)||0, 'Change (LL)':Number(o.changeLbp)||0, 'Rate (LL per $)':Number(o.rate)||'',
-    'Name':str(o.name), 'Phone':str(o.phone), 'Note':str(o.note), 'Status':o.status==='done'?'Done':'Waiting' }; });
+  var sold={}, soldRows=[];
+  var rows=list.map(function(o){ var d=new Date(Number(o.createdAt)||0), lines=orderLines(o);
+    lines.forEach(function(l){ var k=l.name; if(!sold[k]){ sold[k]={'Item':k,'Sold':0,'Sales ($)':0}; soldRows.push(sold[k]); } sold[k]['Sold']+=l.qty; sold[k]['Sales ($)']=Math.round((sold[k]['Sales ($)']+l.qty*l.price)*100)/100; });
+    return { 'Order':Number(o.n)||'', 'Date':dayKey(d.getTime()), 'Time':('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2),
+      'Items':lines.map(function(l){return l.qty+'x '+l.name;}).join(', '), 'Item count':lines.reduce(function(a,l){return a+l.qty;},0),
+      'Total ($)':Number(o.total)||0, 'Paid by':str(o.method), 'Name':str(o.name), 'Phone':str(o.phone), 'Note':str(o.note), 'Status':o.status==='done'?'Done':'Waiting' }; });
+  soldRows.sort(function(a,b){return b['Sold']-a['Sold'];});
   var cust=customers(list).map(function(r){return {'Name':r.name,'Phone':r.phone,'Orders':r.count,'Spent ($)':r.spent/100};});
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{'Order':'No orders yet'}]),'Orders');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(soldRows.length?soldRows:[{'Item':'Nothing sold yet'}]),'Items sold');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(cust.length?cust:[{'Name':'No customers yet'}]),'Customers');
   var buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
   saveFile('apron-orders-'+dayKey(Date.now())+'.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
@@ -355,7 +276,7 @@ $('restore').addEventListener('change',function(){
   r.readAsText(f);
 });
 function wipeUI(open){ $('wipe').hidden=open; $('wipe-yes').hidden=!open; $('wipe-no').hidden=!open; }
-$('wipe').addEventListener('click',function(){ wipeUI(true); $('backup-msg').textContent=cloud.on?'This removes every order from all synced devices and cannot be undone. Export or back up first.':'This removes all '+orders.length+' orders from this tablet and cannot be undone. Export or back up first.'; });
+$('wipe').addEventListener('click',function(){ wipeUI(true); $('backup-msg').textContent=cloud.on?'This removes every order from all synced devices and cannot be undone. Export or back up first.':'This removes all '+orders.length+' orders from this device and cannot be undone. Export or back up first.'; });
 $('wipe-no').addEventListener('click',function(){ wipeUI(false); $('backup-msg').textContent=''; });
 $('wipe-yes').addEventListener('click',async function(){
   if(cloud.on){ await refreshHistory(); cloudWrite(histList().map(function(o){return ['delete',o];})); pastOrders=[]; }
@@ -376,7 +297,7 @@ function renderLock(){
   var setting=!passRec()||changing;
   $('v-admin').classList.toggle('locked',!unlocked||changing);
   $('lock-title').textContent=changing?'Change the admin password':setting?'Set an admin password':'Admin is locked';
-  $('lock-hint').textContent=setting?'Choose a password of at least 4 characters and write it down. It protects prices, the customer list, exports and resets on this tablet.':'Enter the admin password to see sales, customers and the menu.';
+  $('lock-hint').textContent=setting?'Choose a password of at least 4 characters and write it down. It protects prices, the customer list, exports and resets on this device.':'Enter the admin password to see sales, customers and the menu.';
   $('lock-pass2').hidden=!setting; $('lock-go').textContent=setting?'Save password':'Unlock';
 }
 function lockAdmin(){ if(!unlocked&&!changing) return; unlocked=false; changing=false; $('lock-pass').value=''; $('lock-pass2').value=''; $('lock-msg').textContent=''; renderLock(); }
@@ -388,7 +309,7 @@ $('lock-form').addEventListener('submit',async function(e){
     if(p.length<4){ msg.textContent='Use at least 4 characters.'; return; }
     if(p!==$('lock-pass2').value){ msg.textContent='The two passwords do not match.'; return; }
     var salt=newId()+newId();
-    if(!writeJSON(K_PASS,{salt:salt,hash:await hashPass(p,salt)})){ msg.textContent='The password could not be saved on this tablet.'; return; }
+    if(!writeJSON(K_PASS,{salt:salt,hash:await hashPass(p,salt)})){ msg.textContent='The password could not be saved on this device.'; return; }
     changing=false; unlocked=true;
   }else{
     if(await hashPass(p,rec.salt)!==rec.hash){ msg.textContent='Wrong password.'; $('lock-pass').value=''; return; }
@@ -409,7 +330,7 @@ function renderSync(){
   if(!cloud.ready){ hint.textContent='Sync has not started. Connect to the internet once and reload the app.'; return; }
   if(!cloud.user){ hint.textContent='Sign in with the shop login to share orders between your devices. Orders already on this device are sent up when you do.'; form.hidden=false; return; }
   off.hidden=false;
-  dot.textContent=!navigator.onLine?'Offline, will sync':cloud.pending?'Syncing\u2026':'Synced';
+  dot.textContent=!navigator.onLine?'Offline, will sync':cloud.pending?'Syncing…':'Synced';
   hint.textContent='Sync is on as '+str(cloud.user.email)+'. Orders are shared with every device signed in with this login.';
 }
 function goOnline(){
@@ -421,18 +342,9 @@ function goOnline(){
     orders=snap.docs.map(function(d){ var o=d.data()||{}; return Object.assign({},o,{id:d.id,createdAt:Number(o.createdAt)||0}); });
     cloud.pending=snap.metadata.hasPendingWrites; renderAll(); renderSync();
   },syncErr));
-  cloud.unsub.push(shop().collection('whishqr').onSnapshot(function(snap){
-    if(snap.empty&&!snap.metadata.fromCache&&whishQrs.length&&!cloud.qrSeeded){ cloud.qrSeeded=true; whishQrs.forEach(function(q){ shop().collection('whishqr').doc(String(cents(q.amount))).set(q).catch(syncErr); }); return; }
-    if(snap.metadata.fromCache&&snap.empty) return;
-    cloud.qrSeeded=true;
-    whishQrs=snap.docs.map(function(d){return d.data();}).filter(function(q){return q&&q.img&&q.amount>0;}); writeJSON(K_WQR,whishQrs); shownQr=''; renderQrs(); renderSummary();
-  },syncErr));
-  cloud.unsub.push(shop().collection('config').doc('whish').onSnapshot(function(snap){
-    if(!snap.exists) return; whishExpires=snap.data().expires!==false; writeJSON(K_WQX,!whishExpires); shownQr=''; renderQrs(); renderSummary();
-  },syncErr));
   var menuRef=shop().collection('config').doc('menu');
   cloud.unsub.push(menuRef.onSnapshot(function(snap){
-    if(snap.exists){ cfg=cleanMenu(snap.data()); writeJSON(K_CFG,cfg); if(draft.ticket&&!ticket()) draft.ticket=null; if(!dirty) loadEditor(); renderAll(); }
+    if(snap.exists){ cfg=cleanMenu(snap.data()); writeJSON(K_CFG,cfg); if(!dirty) loadEditor(); renderAll(); }
     else if(!snap.metadata.fromCache){ menuRef.set(cfg).catch(syncErr); }
   },syncErr));
 }
@@ -454,7 +366,7 @@ async function startCloud(){
 }
 $('sync-form').addEventListener('submit',function(e){
   e.preventDefault(); var msg=$('sync-msg'), b=$('sync-go'); if(!cloud.ready) return;
-  b.disabled=true; msg.textContent='Signing in\u2026';
+  b.disabled=true; msg.textContent='Signing in…';
   firebase.auth().signInWithEmailAndPassword($('sync-email').value.trim(),$('sync-pass').value).then(function(){ $('sync-pass').value=''; msg.textContent=''; },
     function(err){ msg.textContent=err&&err.code==='auth/network-request-failed'?'No internet. Connect and try again.':'Wrong email or password.'; }).then(function(){ b.disabled=false; });
 });
@@ -462,9 +374,9 @@ $('sync-off').addEventListener('click',function(){ if(cloud.ready) firebase.auth
 window.addEventListener('online',renderSync); window.addEventListener('offline',renderSync);
 
 /* ---------- boot ---------- */
-function renderAll(){ renderChoices(); renderSummary(); renderWall(); renderToday(); }
-loadEditor(); renderAll(); renderQrs(); renderSync(); startCloud();
-/* a second window on the same tablet (for example the Orders screen) stays in step */
-window.addEventListener('storage',function(e){ if(e.key!==K_ORD&&e.key!==K_CFG) return; loadAll(); if(draft.ticket&&!ticket()) draft.ticket=null; if(!dirty) loadEditor(); renderAll(); });
+function renderAll(){ renderMenu(); renderSummary(); renderWall(); renderToday(); }
+loadEditor(); renderAll(); renderSync(); startCloud();
+/* a second window on the same device (for example the Orders screen) stays in step */
+window.addEventListener('storage',function(e){ if(e.key!==K_ORD&&e.key!==K_CFG) return; loadAll(); if(!dirty) loadEditor(); renderAll(); });
 if(!writeJSON('apron.till.probe',1)) warn('This browser is blocking storage, so orders cannot be saved. Leave private browsing mode and reload.');
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){ navigator.serviceWorker.register('sw.js').catch(function(){}); }

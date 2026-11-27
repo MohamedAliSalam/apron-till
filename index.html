@@ -150,6 +150,22 @@ th{font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;color
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .span2{grid-column:1/-1}
 @media (max-width:860px){ .till,.admin{grid-template-columns:1fr} .fields{grid-template-columns:1fr} .tiles{grid-template-columns:1fr 1fr} }
+.cart{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.cart li{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.cart li:first-child{border-top:0}
+.cart li.none{display:block;color:var(--muted)}
+.cart .nm{min-width:0;overflow-wrap:anywhere;font-weight:600}
+.cart .nm small{display:block;color:var(--muted);font-weight:400}
+.qty{display:flex;align-items:center;gap:6px}
+.qty button{width:38px;height:38px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font-size:1.3rem;cursor:pointer;line-height:1}
+.qty b{min-width:1.6em;text-align:center}
+.choice{position:relative}
+.choice .badge{position:absolute;top:8px;right:8px;background:var(--orange);color:var(--on-orange);border-radius:999px;min-width:1.7em;text-align:center;font-weight:700;padding:1px 6px}
+.catgroup{display:flex;flex-direction:column;gap:8px}
+#menu{display:flex;flex-direction:column;gap:18px}
+.lines2{list-style:none;margin:0;padding:0;font-family:var(--display);font-weight:700;text-transform:uppercase;font-size:1.5rem;letter-spacing:.03em;line-height:1.15}
+.row.item{grid-template-columns:1fr 150px 96px 40px}
+@media (max-width:620px){ .row.item{grid-template-columns:1fr 96px 40px} .row.item input.cat{grid-column:1/-1;order:5} }
 </style>
 </head>
 <body>
@@ -168,51 +184,25 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 <main class="wrap">
   <section id="v-cashier" class="till">
     <div class="panel">
-      <div class="group"><span class="label">Ticket</span><div class="choices" id="tickets"></div></div>
-      <div class="group"><span class="label">Add-ons</span>
-        <button type="button" class="choice small addbtn" id="addbtn" aria-expanded="false" aria-controls="addons"><b>Add-ons</b><span id="addbtn-s">None</span></button>
-        <div class="addlist" id="addons" hidden></div>
-      </div>
-      <div class="group"><span class="label">Customer (optional)</span>
-        <div class="fields">
-          <label>Name<input id="c-name" autocomplete="off" placeholder="Name for the order"></label>
-          <label>Phone number<input id="c-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="78 123 456"></label>
-          <label class="full">Note for the barista<input id="c-note" autocomplete="off" placeholder="Iced latte, first time…"></label>
-        </div>
-      </div>
+      <div id="menu"></div>
     </div>
     <div class="panel">
       <span class="label">This order</span>
-      <ul class="lines" id="lines"><li><span>Pick a ticket to start</span></li></ul>
+      <ul class="cart" id="cart"><li class="none">Tap a drink to add it.</li></ul>
       <div class="total"><span class="label">Total</span><b id="total">$0</b></div>
       <p class="hint ll" id="total-ll"></p>
-      <div class="group"><span class="label">Paid by</span>
-        <div class="seg" id="method">
-          <button type="button" data-m="cash" aria-pressed="true">Cash</button>
-          <button type="button" data-m="whish" aria-pressed="false">Whish</button>
-        </div>
+      <div class="fields">
+        <label>Name<input id="c-name" autocomplete="off" placeholder="Name for the order"></label>
+        <label>Phone number<input id="c-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="78 123 456"></label>
+        <label class="full">Note for the barista<input id="c-note" autocomplete="off" placeholder="Oat milk, first time…"></label>
       </div>
-      <div class="group" id="cashbox">
-        <div class="fields">
-          <label>Received in dollars ($)<input id="received" inputmode="decimal" autocomplete="off" placeholder="0"></label>
-          <label>Received in pounds (LL)<input id="received-ll" inputmode="numeric" autocomplete="off" placeholder="0"></label>
-        </div>
-        <div class="quick" id="quick">
-          <button type="button" data-q="exact">Exact</button><button type="button" data-q="10">$10</button><button type="button" data-q="20">$20</button><button type="button" data-q="50">$50</button><button type="button" data-q="100">$100</button><button type="button" data-q="exactll">Exact in LL</button>
-        </div>
-        <div class="change" id="changebox"><span class="label" id="changelabel">Give back</span><b id="change">Nothing</b></div>
-        <div class="quick" id="splitbox" hidden>
-          <button type="button" id="usd-less">Fewer dollars</button><button type="button" id="usd-more">More dollars</button><span class="hint" id="split-note"></span>
-        </div>
+      <div class="group" id="paybox">
+        <span class="label">Customer pays with MyMonty</span>
+        <img id="pay-qr" class="qr" src="monty-qr.png" alt="MyMonty QR code" hidden>
+        <div class="change"><span class="label">To pay</span><b id="pay-total">$0</b></div>
       </div>
-      <div class="group" id="whishbox" hidden>
-        <span class="label" id="whish-label">Customer scans to pay</span>
-        <img id="whish-qr" class="qr" src="whish-qr.png" alt="Whish QR code">
-        <p class="hint" id="whish-note" style="text-align:center;margin:0 auto"></p>
-        <p class="empty" id="whish-missing" hidden>The Whish QR code has not been added yet.</p>
-        <div class="change"><span class="label">To pay by Whish</span><b id="whish-total">$0</b></div>
-      </div>
-      <button class="big" type="button" id="place" disabled>Send order</button>
+      <button class="big" type="button" id="place" disabled>Paid, send order</button>
+      <div class="acts"><button class="link" type="button" id="clear-cart">Clear this order</button></div>
       <p class="flash" id="flash" hidden></p>
     </div>
   </section>
@@ -244,43 +234,19 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       </div>
       <p class="label" id="t-split"></p>
     </div>
-    <div class="panel">
-      <h2>Tickets</h2>
-      <div class="rows" id="e-tickets"></div>
-      <div class="acts"><button class="btn" type="button" id="add-ticket">Add a ticket</button></div>
-    </div>
-    <div class="panel">
-      <h2>Add-ons</h2>
-      <div class="rows" id="e-addons"></div>
-      <div class="acts"><button class="btn" type="button" id="add-addon">Add an add-on</button></div>
-    </div>
     <div class="panel span2">
-      <h2>Cash and exchange rate</h2>
+      <h2>Menu</h2>
+      <p class="hint">Each row is one thing the cashier can tap: its name, the group it sits under, and its price in dollars.</p>
+      <div class="rows" id="e-items"></div>
+      <datalist id="cats"></datalist>
       <div class="fields">
         <label>Lebanese pounds for $1<input id="e-rate" inputmode="numeric" autocomplete="off"></label>
-        <label>Smallest dollar note you give as change
-          <select id="e-step"><option value="1">$1</option><option value="5">$5</option><option value="10">$10</option><option value="20">$20</option></select>
-        </label>
       </div>
-      <p class="hint">Change is given in dollars down to this note, and the rest in Lebanese pounds. Press "Save menu" to save.</p>
-    </div>
-    <div class="panel span2">
-      <div class="acts"><button class="btn primary" type="button" id="save-menu">Save menu</button><span id="save-msg" class="label"></span></div>
+      <div class="acts"><button class="btn" type="button" id="add-item">Add a drink</button><button class="btn primary" type="button" id="save-menu">Save menu</button><span id="save-msg" class="label"></span></div>
     </div>
     <div class="panel span2">
       <div class="wall-head" style="margin:0"><h2>Customers</h2><div class="acts"><span class="label" id="export-msg"></span><button class="btn primary" type="button" id="export">Export all orders to Excel</button><button class="btn" type="button" id="copy-cust">Copy list</button></div></div>
       <div class="tablewrap"><table><thead><tr><th>Name</th><th>Phone</th><th class="num">Orders</th></tr></thead><tbody id="cust"><tr><td colspan="3">Customers who give a name or number appear here.</td></tr></tbody></table></div>
-    </div>
-    <div class="panel span2">
-      <h2>Whish QR codes by amount</h2>
-      <p class="hint">Add one QR for each order total. When the cashier picks Whish, the QR that matches the total is shown. For any other total, your main QR is shown and the customer types the amount.</p>
-      <div class="qrgrid" id="qr-list"></div>
-      <div class="acts">
-        <input id="qr-amount" inputmode="decimal" autocomplete="off" placeholder="Total ($)" aria-label="Order total in dollars">
-        <label class="btn filebtn">Choose the QR image<input type="file" id="qr-file" accept="image/*" hidden></label>
-      </div>
-      <label class="chk"><input type="checkbox" id="qr-expires" checked> Stop showing a QR 48 hours after it was added (Whish amount QRs expire)</label>
-      <p class="label" id="qr-msg"></p>
     </div>
     <div class="panel span2">
       <h2>Sync between devices</h2>
@@ -299,7 +265,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     </div>
     <div class="panel span2">
       <h2>Backup and reset</h2>
-      <p class="hint">All orders are stored on this tablet only. Save a backup at the end of each day, in case the tablet is lost or its browser data is cleared.</p>
+      <p class="hint">Save a backup at the end of each day, in case a device is lost or its browser data is cleared.</p>
       <div class="acts">
         <button class="btn" type="button" id="backup">Save a backup file</button>
         <label class="btn filebtn">Restore from a backup<input type="file" id="restore" accept="application/json,.json" hidden></label>
@@ -311,6 +277,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     </div>
   </section>
 </main>
+
 <script src="xlsx.full.min.js"></script>
 <script src="firebase-config.js"></script>
 <script src="app.js"></script>
