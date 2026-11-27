@@ -472,7 +472,7 @@ $('lock-form').addEventListener('submit',async function(e){
   $('lock-pass').value=''; $('lock-pass2').value=''; msg.textContent=''; renderLock();
   if(cloud.on) refreshHistory().then(renderToday);
 });
-/* Fingerprint, face or the device's own screen lock, through the browser's passkey support.
+/* The device's own lock (its code, Face ID or fingerprint), through the browser's passkey support.
    It is set up per device, after unlocking with the password once. The password always still works. */
 var K_BIO='apron.till.bio';
 function b64(buf){ return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))); }
@@ -483,7 +483,7 @@ function bioRec(){ var r=readJSON(K_BIO); return r&&r.id?r:null; }
 function renderBio(){
   $('bio-go').hidden=!(bioReady&&bioRec())||changing;
   $('bio-set').hidden=!bioReady;
-  $('bio-set').textContent=bioRec()?'Turn off fingerprint unlock':'Turn on fingerprint unlock';
+  $('bio-set').textContent=bioRec()?'Turn off device unlock':'Turn on device unlock';
 }
 (async function(){
   try{ bioReady=!!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials)&&await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }catch(e){ bioReady=false; }
@@ -491,7 +491,7 @@ function renderBio(){
 })();
 $('bio-set').addEventListener('click',async function(){
   var msg=$('bio-msg');
-  if(bioRec()){ localStorage.removeItem(K_BIO); msg.textContent='Fingerprint unlock is off on this device.'; renderBio(); return; }
+  if(bioRec()){ localStorage.removeItem(K_BIO); msg.textContent='Device unlock is off on this device.'; renderBio(); return; }
   try{
     var cred=await navigator.credentials.create({publicKey:{challenge:rnd(32),rp:{name:'Apron Till'},
       user:{id:rnd(16),name:'apron-admin',displayName:'Apron admin'},
@@ -499,8 +499,8 @@ $('bio-set').addEventListener('click',async function(){
       authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'discouraged'},
       timeout:60000,attestation:'none'}});
     if(!cred) throw 0;
-    writeJSON(K_BIO,{id:b64(cred.rawId)}); msg.textContent='Fingerprint unlock is on for this device. The password still works too.';
-  }catch(e){ msg.textContent='Fingerprint unlock was not set up. Make sure this device has a fingerprint or screen lock, then try again.'; }
+    writeJSON(K_BIO,{id:b64(cred.rawId)}); msg.textContent='Device unlock is on. Admin now opens with this device\u2019s own lock: its code, Face ID or fingerprint. The password still works too.';
+  }catch(e){ msg.textContent='Device unlock was not set up. Make sure this device has a screen lock, then try again.'; }
   renderBio();
 });
 $('bio-go').addEventListener('click',async function(){
