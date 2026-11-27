@@ -1,5 +1,5 @@
 // Keeps the app working without internet. Bump the version to push an update.
-const CACHE = 'apron-till-v28';
+const CACHE = 'apron-till-v29';
 const FILES = ['./', 'index.html', 'app.js', 'firebase-config.js', 'xlsx.full.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'monty-qr.png'];
 // 'reload' skips the browser's own 10-minute copy, so a new version is never built from old files.
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, {cache: 'reload'})))).then(() => self.skipWaiting())); });

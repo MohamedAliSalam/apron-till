@@ -40,9 +40,11 @@ function localOrders(){ var o=readJSON(K_ORD); return (Array.isArray(o)?o:[]).fi
 /* shown on a device that has no saved menu yet and is not signed in to sync */
 var DEFAULT_MENU={items:[
   {id:'espresso',name:'Espresso',hot:2},{id:'americano',name:'Americano',hot:2.5,iced:3},{id:'flat-white',name:'Flat White',hot:3,milk:true},
-  {id:'latte',name:'Latte',hot:4,iced:4,milk:true},{id:'spanish-latte',name:'Spanish',hot:5,iced:5,milk:true},{id:'hot-chocolate',name:'Hot Chocolate',hot:4,milk:true},
+  {id:'latte',name:'Latte',hot:4,iced:4,milk:true},{id:'spanish-latte',name:'Spanish Latte',hot:5,iced:5,milk:true},
+  {id:'mocha',name:'Mocha',hot:5,iced:5,milk:true},{id:'white-mocha',name:'White Mocha',hot:5,iced:5,milk:true},
+  {id:'hot-chocolate',name:'Hot Chocolate',hot:4,milk:true},
   {id:'matcha',name:'Matcha',hot:5,iced:5,milk:true,variants:[{name:'Dirty',add:1},{name:'Strawberry',add:1},{name:'Mango',add:1}]},
-  {id:'syrup',name:'Syrup',price:1,cat:'Extras',options:['Vanilla','Caramel','Hazelnut','Pumpkin Spice','Tiramisu','Cinnamon','Toffenut']},
+  {id:'syrup',name:'Syrup',price:1,cat:'Extras',options:['Vanilla','Caramel','Hazelnut','Pumpkin Spice','Tiramisu','Cinnamon','Toffeenut']},
   {id:'milk',name:'Milk',price:0,cat:'Extras',milkOnly:true,options:[{name:'Oat',add:1},{name:'Lactose free',add:0},{name:'Skimmed',add:0},{name:'Almond',add:1}]},
   {id:'espresso-shot',name:'Espresso Shot',price:1,cat:'Extras'},{id:'we-make-it',name:'We make it',price:1,cat:'Extras'}],rate:89000};
 function loadAll(){ if(cloud.on) return; cfg=cleanMenu(readJSON(K_CFG)||DEFAULT_MENU); orders=localOrders(); }
